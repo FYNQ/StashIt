@@ -2,49 +2,58 @@ import 'package:flutter/material.dart';
 import 'data/drift/database.dart';
 import 'ui/search/search_screen.dart';
 import 'ui/search/search_controller.dart';
+import 'ui/add_item/add_item_screen.dart';
 import 'share/share_intent_handler.dart';
-import 'package:drift/drift.dart';
+
+late final AppDatabase database;
+late final ItemSearchController searchController;
+
+/// 🔑 GLOBAL navigator key
+final GlobalKey<NavigatorState> navigatorKey =
+    GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final db = AppDatabase();
-  final controller = ItemSearchController(db);
+  database = AppDatabase();
+  searchController = ItemSearchController(database);
 
-  runApp(
-    MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: SearchScreen(controller: controller),
-    ),
-  );
+  await ShareIntentHandler.init();
 
-  // 🔽 everything below runs AFTER UI is shown
-  ShareIntentHandler.init();
+  runApp(const StashItApp());
 
-  ShareIntentHandler.stream.listen((shared) async {
-    final now = DateTime.now();
+  // 🔴 LISTEN AFTER runApp
+  ShareIntentHandler.stream.listen((sharedText) {
+    if (sharedText == null || sharedText.isEmpty) return;
 
-    if (shared.text != null && shared.text!.isNotEmpty) {
-      await db.into(db.items).insert(
-        ItemsCompanion.insert(
-          title: shared.text!.length > 50
-              ? shared.text!.substring(0, 50)
-              : shared.text!,
-          content: Value(shared.text),
-          createdAt: Value(now),
+    final nav = navigatorKey.currentState;
+    if (nav == null) return;
+
+    nav.push(
+      MaterialPageRoute(
+        builder: (_) => AddItemScreen(
+          database: database,
+          sharedText: sharedText,
         ),
-      );
-    }
-
-    for (final file in shared.files) {
-      await db.into(db.items).insert(
-        ItemsCompanion.insert(
-          title: file.path.split('/').last,
-          content: Value(file.path),
-          createdAt: Value(now),
-        ),
-      );
-    }
+      ),
+    );
   });
+}
+
+class StashItApp extends StatelessWidget {
+  const StashItApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      navigatorKey: navigatorKey, // 🔴 REQUIRED
+      debugShowCheckedModeBanner: false,
+      title: 'StashIt',
+      theme: ThemeData(useMaterial3: true),
+      home: SearchScreen(
+        controller: searchController,
+      ),
+    );
+  }
 }
 

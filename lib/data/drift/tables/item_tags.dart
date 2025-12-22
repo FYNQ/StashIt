@@ -1,8 +1,13 @@
 import 'package:drift/drift.dart';
+import 'items.dart';
+import 'tags.dart';
 
 class ItemTags extends Table {
-  TextColumn get itemId => text()();
-  IntColumn get tagId => integer()();
+  IntColumn get itemId =>
+      integer().references(Items, #id)();
+
+  IntColumn get tagId =>
+      integer().references(Tags, #id)();
 
   @override
   Set<Column> get primaryKey => {itemId, tagId};

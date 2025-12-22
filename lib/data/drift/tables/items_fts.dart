@@ -1,8 +1,16 @@
 import 'package:drift/drift.dart';
-import '../database.dart';
 
 class ItemsFts extends Table {
-  IntColumn get rowid => integer().autoIncrement()();
-  TextColumn get content => text().nullable()();
+  TextColumn get title => text()();
+  TextColumn get content => text()();
+
+  @override
+  Set<Column> get primaryKey => {};
+
+  @override
+  bool get withoutRowId => true;
+
+  @override
+  String get tableName => 'items_fts';
 }
 

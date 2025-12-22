@@ -1,53 +1,18 @@
 import 'dart:async';
-import 'package:receive_sharing_intent/receive_sharing_intent.dart';
-
-class SharedData {
-  final String? text;
-  final List<SharedMediaFile> files;
-
-  SharedData({this.text, this.files = const []});
-}
+import 'package:flutter/services.dart';
 
 class ShareIntentHandler {
-  static final _controller = StreamController<SharedData>.broadcast();
-  static Stream<SharedData> get stream => _controller.stream;
+  static const _channel = EventChannel('stashit/share');
+  static final _controller = StreamController<String>.broadcast();
 
-  static void init() {
-    // Cold start
-    ReceiveSharingIntent.instance
-        .getInitialMedia()
-        .then(_handleMedia);
+  static Stream<String> get stream => _controller.stream;
 
-    // While app is running
-    ReceiveSharingIntent.instance
-        .getMediaStream()
-        .listen(_handleMedia);
-  }
-
-  static void _handleMedia(List<SharedMediaFile> files) {
-    if (files.isEmpty) return;
-
-    String? text;
-    final attachments = <SharedMediaFile>[];
-
-    for (final file in files) {
-      if (file.mimeType == 'text/plain') {
-        text ??= file.path; // Chrome link lives here
-      } else {
-        attachments.add(file);
+  static Future<void> init() async {
+    _channel.receiveBroadcastStream().listen((event) {
+      if (event is String && event.isNotEmpty) {
+        _controller.add(event);
       }
-    }
-
-    _controller.add(
-      SharedData(
-        text: text,
-        files: attachments,
-      ),
-    );
-  }
-
-  static void dispose() {
-    _controller.close();
+    });
   }
 }
 

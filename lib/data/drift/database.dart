@@ -18,11 +18,8 @@ part 'database.g.dart';
 
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
-    // Android/iOS-safe SQLite directory
     final dir = await getApplicationDocumentsDirectory();
-    // Full path to DB file
     final file = File(p.join(dir.path, 'app_flutter/stashit.db'));
-
     return NativeDatabase(file);
   });
 }
@@ -46,174 +43,143 @@ class AppDatabase extends _$AppDatabase {
   @override
   int get schemaVersion => 1;
 
+  String _deriveTitle(String? text) {
+    if (text == null || text.trim().isEmpty) {
+      return 'Shared item';
+    }
+    final t = text.trim();
+    return t.length > 50 ? '${t.substring(0, 50)}…' : t;
+  }
+
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) async {
           await m.createAll();
 
-          // FTS triggers
+          // Populate FTS
           await customStatement('''
-            INSERT INTO items_fts(rowid, content)
-            SELECT rowid, content FROM items WHERE content IS NOT NULL;
+            INSERT INTO items_fts(rowid, title, content)
+            SELECT id, title, content FROM items
+            WHERE content IS NOT NULL;
           ''');
 
+          // INSERT trigger
           await customStatement('''
             CREATE TRIGGER items_ai AFTER INSERT ON items
-            WHEN new.content IS NOT NULL
             BEGIN
-              INSERT INTO items_fts(rowid, content)
-              VALUES (new.rowid, new.content);
+              INSERT INTO items_fts(rowid, title, content)
+              VALUES (new.id, new.title, new.content);
             END;
           ''');
 
+          // UPDATE trigger
           await customStatement('''
             CREATE TRIGGER items_au AFTER UPDATE ON items
             BEGIN
-              DELETE FROM items_fts WHERE rowid = old.rowid;
-              INSERT INTO items_fts(rowid, content)
-              SELECT new.rowid, new.content
-              WHERE new.content IS NOT NULL;
+              DELETE FROM items_fts WHERE rowid = old.id;
+              INSERT INTO items_fts(rowid, title, content)
+              VALUES (new.id, new.title, new.content);
             END;
           ''');
 
+          // DELETE trigger
           await customStatement('''
             CREATE TRIGGER items_ad AFTER DELETE ON items
             BEGIN
-              DELETE FROM items_fts WHERE rowid = old.rowid;
+              DELETE FROM items_fts WHERE rowid = old.id;
             END;
           ''');
         },
       );
 
-Future<void> insertSharedItem({
-  required String title,
-  String? content,
-}) {
-  return into(items).insert(
-    ItemsCompanion.insert(
-      title: title,
-      content: Value(content),
-    ),
-  );
+  // --------------------------------------------------
+  // INSERT
+  // --------------------------------------------------
+
+  Future<int> insertSharedData({
+    String? text,
+    String? title,
+  }) {
+    final now = DateTime.now();
+
+    print('Inserted shared item: $title');
+
+    return into(items).insert(
+      ItemsCompanion.insert(
+        title: title ?? _deriveTitle(text),
+        content: Value(text),
+        updatedAt: Value(now),
+      ),
+    );
+  }
+
+  // --------------------------------------------------
+  // SEARCH
+  // --------------------------------------------------
+
+Future<List<Item>> searchItems(String query) async {
+  final result = await customSelect(
+    'SELECT * FROM items WHERE title LIKE ? OR content LIKE ? ORDER BY updated_at DESC',
+    variables: [Variable.withString('%$query%'), Variable.withString('%$query%')],
+  ).get();
+  
+  // ✅ FIX: Use Future.wait to resolve all futures
+  return Future.wait(result.map(items.mapFromRow));
 }
 
-
-  /// Search all items matching query
-  Future<List<Item>> searchItems(String query) async {
-    if (query.trim().isEmpty) return [];
-
-    final result = await customSelect(
-      '''
-      SELECT items.*
-      FROM items
-      JOIN items_fts ON items_fts.rowid = items.rowid
-      WHERE items_fts MATCH ?
-      ORDER BY bm25(items_fts)
-      ''',
-      variables: [Variable.withString(query)],
-      readsFrom: {items, itemsFts},
-    ).get();
-
-	return await Future.wait(result.map(items.mapFromRow));
-  }
-
-  /// Search items with optional tag filtering
-  Future<List<Item>> searchItemsWithTag({
-    required String query,
-    int? tagId,
-  }) async {
-    if (query.trim().isEmpty) return [];
-
-    final sql = StringBuffer('''
-      SELECT DISTINCT items.*
-      FROM items
-      JOIN items_fts ON items_fts.rowid = items.rowid
-    ''');
-
-    final vars = <Variable>[];
-    if (tagId != null) {
-      sql.write('JOIN item_tags ON item_tags.item_id = items.id ');
-    }
-
-    sql.write('WHERE items_fts MATCH ? ');
-    vars.add(Variable.withString(query));
-
-    if (tagId != null) {
-      sql.write('AND item_tags.tag_id = ? ');
-      vars.add(Variable.withInt(tagId));
-    }
-
-    sql.write('ORDER BY bm25(items_fts)');
-
-    final result = await customSelect(sql.toString(), variables: vars, readsFrom: {items, itemTags}).get();
-	return await Future.wait(result.map(items.mapFromRow));
-  }
-
-/// Insert data from share ...
-Future<int> insertSharedData({
-  String? text,
-  String? title,
+Future<List<Item>> searchItemsWithTag({
+  required String query,
+  required int? tagId,
 }) async {
-  final now = DateTime.now();
-
-  return into(items).insert(
-    ItemsCompanion.insert(
-      title: title ?? _deriveTitle(text),
-      content: Value(text),
-      updatedAt: Value(now),
-    ),
-  );
+  // Handle null tagId case
+  if (tagId == null) {
+    // If no tag specified, search all items
+    return searchItems(query);
+  }
+  
+  final result = await customSelect(
+    'SELECT * FROM items WHERE (title LIKE ? OR content LIKE ?) AND tag_id = ? ORDER BY updated_at DESC',
+    variables: [
+      Variable.withString('%$query%'), 
+      Variable.withString('%$query%'),
+      Variable.withInt(tagId), // Now tagId is guaranteed to be non-null
+    ],
+  ).get();
+  
+  return Future.wait(result.map(items.mapFromRow));
 }
 
-String _deriveTitle(String? text) {
-  if (text == null || text.trim().isEmpty) {
-    return 'Shared item';
-  }
-
-  final trimmed = text.trim();
-  return trimmed.length > 50
-      ? '${trimmed.substring(0, 50)}…'
-      : trimmed;
-}
-
-
-  /// Search with pagination
-  Future<List<Item>> searchItemsPaged({
-    required String query,
-    int? tagId,
-    required int limit,
-    required int offset,
-  }) async {
-    if (query.trim().isEmpty) return [];
-
-    final sql = StringBuffer('''
-      SELECT DISTINCT items.*
-      FROM items
-      JOIN items_fts ON items_fts.rowid = items.rowid
-    ''');
-
-    final vars = <Variable>[];
-    if (tagId != null) {
-      sql.write('JOIN item_tags ON item_tags.item_id = items.id ');
-    }
-
-    sql.write('WHERE items_fts MATCH ? ');
-    vars.add(Variable.withString(query));
-
-    if (tagId != null) {
-      sql.write('AND item_tags.tag_id = ? ');
-      vars.add(Variable.withInt(tagId));
-    }
-
-    sql.write('ORDER BY bm25(items_fts) LIMIT ? OFFSET ?');
-    vars.add(Variable.withInt(limit));
-    vars.add(Variable.withInt(offset));
-
-    final result = await customSelect(sql.toString(), variables: vars, readsFrom: {items, itemTags}).get();
-	return await Future.wait(result.map(items.mapFromRow));
-  }
+  // --------------------------------------------------
+  // TAGS
+  // --------------------------------------------------
 
   Future<List<Tag>> getAllTags() => select(tags).get();
+
+  Future<void> attachTag({
+    required int itemId,
+    required int tagId,
+  }) {
+    return into(itemTags).insert(
+      ItemTagsCompanion.insert(
+        itemId: itemId,
+        tagId: tagId,
+      ),
+    );
+  }
+
+Future<List<Item>> getRecentItems() async {
+  final result = await customSelect(
+    'SELECT * FROM items ORDER BY updated_at DESC LIMIT 20',
+  ).get();
+  
+  return Future.wait(result.map(items.mapFromRow));
 }
 
+
+  Future<List<Item>> getAllItems() {
+    return (select(items)
+          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]))
+        .get();
+  }
+}
 

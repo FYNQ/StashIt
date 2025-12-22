@@ -1,72 +1,99 @@
-import 'dart:async';
+import 'package:flutter/foundation.dart';
 import '../../data/drift/database.dart';
 
-class ItemSearchController {
+class ItemSearchController extends ChangeNotifier {
   final AppDatabase db;
 
   ItemSearchController(this.db);
 
-  final StreamController<List<Item>> _resultsController = StreamController.broadcast();
-  Stream<List<Item>> get resultsStream => _resultsController.stream;
+  /// Current search query
+  String _query = '';
 
-  String lastQuery = '';
-  int? selectedTagId;
-  int offset = 0;
-  final int pageSize = 20;
-  bool isLoading = false;
-  bool hasMore = true;
-  Timer? _debounce;
+  /// Optional tag filter
+  int? _tagId;
 
-  void search(String query, {int? tagId}) {
-    lastQuery = query;
-    selectedTagId = tagId;
-    offset = 0;
-    hasMore = true;
+  /// Loading state (THIS controls the spinner)
+  bool _isLoading = false;
 
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 300), () async {
-      await _loadMore(reset: true);
-    });
+  /// Current results
+  List<Item> _results = [];
+
+  // --------------------
+  // Public getters
+  // --------------------
+
+  bool get isLoading => _isLoading;
+  List<Item> get results => List.unmodifiable(_results);
+  String get query => _query;
+  int? get tagId => _tagId;
+
+  // --------------------
+  // Public API
+  // --------------------
+
+  /// Called when the search text changes
+  Future<void> updateQuery(String query) async {
+    _query = query;
+    await _search();
   }
 
-  Future<void> loadMore() async {
-    await _loadMore();
+  /// Called when a tag filter is selected / cleared
+  Future<void> updateTag(int? tagId) async {
+    _tagId = tagId;
+    await _search();
   }
 
-  Future<void> _loadMore({bool reset = false}) async {
-    if (isLoading || !hasMore) return;
-    isLoading = true;
+  /// Clear search completely
+  void clear() {
+    _query = '';
+    _tagId = null;
+    _results = [];
+    _isLoading = false;
+    notifyListeners();
+  }
 
-    if (reset) {
-      offset = 0;
-      hasMore = true;
-    }
+  // --------------------
+  // Internal logic
+  // --------------------
 
-    final results = await db.searchItemsPaged(
-      query: lastQuery,
-      tagId: selectedTagId,
-      limit: pageSize,
-      offset: offset,
-    );
+Future<void> _search() async {
+  _isLoading = true;
+  notifyListeners();
 
-    if (reset) {
-      _resultsController.add(results);
+  try {
+    final trimmed = _query.trim();
+
+if (trimmed.isEmpty) {
+  _isLoading = true;
+  notifyListeners();
+
+  try {
+    _results = await db.getRecentItems();
+  } finally {
+    _isLoading = false;
+    notifyListeners();
+  }
+  return;
+}
+
+
+    if (_tagId == null) {
+      _results = await db.searchItems(trimmed);
     } else {
-      final current = await resultsStream.first;
-      _resultsController.add([...current, ...results]);
+      _results = await db.searchItemsWithTag(
+        query: trimmed,
+        tagId: _tagId,
+      );
     }
-
-    if (results.length < pageSize) {
-      hasMore = false;
-    }
-
-    offset += results.length;
-    isLoading = false;
+  } catch (e, st) {
+    debugPrint('Search failed: $e');
+    debugPrintStack(stackTrace: st);
+    _results = [];
+  } finally {
+    _isLoading = false;
+    notifyListeners();
   }
+}
 
-  void dispose() {
-    _resultsController.close();
-    _debounce?.cancel();
-  }
 }
 
