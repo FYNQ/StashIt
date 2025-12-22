@@ -22,7 +22,6 @@ Future<void> main() async {
 
   runApp(const StashItApp());
 
-  // 🔴 LISTEN AFTER runApp
   ShareIntentHandler.stream.listen((sharedText) {
     if (sharedText == null || sharedText.isEmpty) return;
 

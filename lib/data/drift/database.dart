@@ -92,6 +92,43 @@ class AppDatabase extends _$AppDatabase {
         },
       );
 
+
+// Tags
+
+// Fetch a tag by name (case-sensitive; adjust if needed)
+Future<Tag?> getTagByName(String name) async {
+  return (select(tags)..where((t) => t.name.equals(name))).getSingleOrNull();
+}
+
+Future<Tag> upsertTagByName(String name, {String? color}) async {
+  final trimmed = name.trim();
+  if (trimmed.isEmpty) {
+    throw ArgumentError('Tag name cannot be empty');
+  }
+
+  // Try existing
+  final existing =
+      await (select(tags)..where((t) => t.name.equals(trimmed))).getSingleOrNull();
+  if (existing != null) return existing;
+
+  // Insert new; handle race via catch → requery
+  try {
+    final id = await into(tags).insert(
+      TagsCompanion.insert(
+        name: trimmed,
+        color: Value(color),
+      ),
+    );
+    return (select(tags)..where((t) => t.id.equals(id))).getSingle();
+  } catch (_) {
+    // Likely unique constraint from a race; requery
+    final fallback =
+        await (select(tags)..where((t) => t.name.equals(trimmed))).getSingleOrNull();
+    if (fallback != null) return fallback;
+    rethrow;
+  }
+}
+
   // --------------------------------------------------
   // INSERT
   // --------------------------------------------------
