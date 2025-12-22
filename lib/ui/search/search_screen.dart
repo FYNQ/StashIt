@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'search_controller.dart';
+import '../add_item/item_detail_screen.dart'; // Import the ItemDetailScreen
 
 class SearchScreen extends StatefulWidget {
   final ItemSearchController controller;
@@ -80,6 +81,15 @@ class _SearchScreenState extends State<SearchScreen> {
                     final item = widget.controller.results[index];
                     return ListTile(
                       title: Text(item.title),
+                      onTap: () {
+                        // Navigate to detail screen
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ItemDetailScreen(item: item),
+                          ),
+                        );
+                      },
                     );
                   },
                 ),
@@ -91,4 +101,3 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 }
-
