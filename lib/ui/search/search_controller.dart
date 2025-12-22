@@ -31,6 +31,26 @@ class ItemSearchController extends ChangeNotifier {
   // Public API
   // --------------------
 
+// Delete one item and refresh results
+Future<void> deleteItem(int id) async {
+  try {
+    await db.deleteItemById(id);
+  } catch (e) {
+    debugPrint('deleteItem failed: $e');
+  }
+  await _search();
+}
+
+// Delete many items and refresh results
+Future<void> deleteItems(Iterable<int> ids) async {
+  try {
+    await db.deleteItemsByIds(ids);
+  } catch (e) {
+    debugPrint('deleteItems failed: $e');
+  }
+  await _search();
+}
+
   /// Called when the search text changes
   Future<void> updateQuery(String query) async {
     _query = query;
@@ -63,19 +83,15 @@ Future<void> _search() async {
   try {
     final trimmed = _query.trim();
 
-if (trimmed.isEmpty) {
-  _isLoading = true;
-  notifyListeners();
-
-  try {
-    _results = await db.getRecentItems();
-  } finally {
-    _isLoading = false;
-    notifyListeners();
-  }
-  return;
-}
-
+    if (trimmed.isEmpty) {
+      // Respect tag selection on empty query
+      if (_tagId == null) {
+        _results = await db.getRecentItems();
+      } else {
+        _results = await db.getItemsByTag(_tagId!);
+      }
+      return;
+    }
 
     if (_tagId == null) {
       _results = await db.searchItems(trimmed);

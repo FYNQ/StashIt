@@ -93,6 +93,46 @@ class AppDatabase extends _$AppDatabase {
       );
 
 
+// Delete a single item (and its tag links)
+Future<void> deleteItemById(int id) async {
+  await transaction(() async {
+    await (delete(itemTags)..where((t) => t.itemId.equals(id))).go();
+    await (delete(items)..where((t) => t.id.equals(id))).go();
+  });
+}
+
+// Delete multiple items (and their tag links)
+Future<void> deleteItemsByIds(Iterable<int> ids) async {
+  final idList = ids.toList();
+  if (idList.isEmpty) return;
+
+  await transaction(() async {
+    await (delete(itemTags)..where((t) => t.itemId.isIn(idList))).go();
+    await (delete(items)..where((t) => t.id.isIn(idList))).go();
+  });
+}
+
+
+// Get recent items limited to a specific tag
+Future<List<Item>> getItemsByTag(int tagId, {int limit = 50}) async {
+  final result = await customSelect(
+    '''
+    SELECT items.*
+    FROM items
+    JOIN item_tags ON item_tags.item_id = items.id
+    WHERE item_tags.tag_id = ?
+    ORDER BY items.updated_at DESC
+    LIMIT ?
+    ''',
+    variables: [
+      Variable.withInt(tagId),
+      Variable.withInt(limit),
+    ],
+    readsFrom: {items, itemTags},
+  ).get();
+
+  return await Future.wait(result.map(items.mapFromRow));
+}
 
 // Fetch a tag by name
 Future<Tag?> getTagByName(String name) async {
@@ -156,35 +196,50 @@ Future<Tag> upsertTagByName(String name, {String? color}) async {
 Future<List<Item>> searchItems(String query) async {
   final result = await customSelect(
     'SELECT * FROM items WHERE title LIKE ? OR content LIKE ? ORDER BY updated_at DESC',
-    variables: [Variable.withString('%$query%'), Variable.withString('%$query%')],
+    variables: [
+      Variable.withString('%$query%'),
+      Variable.withString('%$query%'),
+    ],
   ).get();
-  
-  // ✅ FIX: Use Future.wait to resolve all futures
-  return Future.wait(result.map(items.mapFromRow));
-}
 
+  // Await each row mapping
+  return await Future.wait(result.map(items.mapFromRow));
+}
 Future<List<Item>> searchItemsWithTag({
   required String query,
   required int? tagId,
 }) async {
-  // Handle null tagId case
   if (tagId == null) {
-    // If no tag specified, search all items
+    // No tag filter → normal search
     return searchItems(query);
   }
-  
-  final result = await customSelect(
-    'SELECT * FROM items WHERE (title LIKE ? OR content LIKE ?) AND tag_id = ? ORDER BY updated_at DESC',
-    variables: [
-      Variable.withString('%$query%'), 
-      Variable.withString('%$query%'),
-      Variable.withInt(tagId), // Now tagId is guaranteed to be non-null
-    ],
-  ).get();
-  
-  return Future.wait(result.map(items.mapFromRow));
-}
 
+  final trimmed = query.trim();
+
+  if (trimmed.isEmpty) {
+    // Empty query + tag selected → only show items with that tag
+    return getItemsByTag(tagId);
+  }
+
+  final result = await customSelect(
+    '''
+    SELECT items.*
+    FROM items
+    JOIN item_tags ON item_tags.item_id = items.id
+    WHERE item_tags.tag_id = ?
+      AND (items.title LIKE ? OR items.content LIKE ?)
+    ORDER BY items.updated_at DESC
+    ''',
+    variables: [
+      Variable.withInt(tagId),
+      Variable.withString('%$trimmed%'),
+      Variable.withString('%$trimmed%'),
+    ],
+    readsFrom: {items, itemTags},
+  ).get();
+
+  return await Future.wait(result.map(items.mapFromRow));
+}
   // --------------------------------------------------
   // TAGS
   // --------------------------------------------------
@@ -207,8 +262,8 @@ Future<List<Item>> getRecentItems() async {
   final result = await customSelect(
     'SELECT * FROM items ORDER BY updated_at DESC LIMIT 20',
   ).get();
-  
-  return Future.wait(result.map(items.mapFromRow));
+
+  return await Future.wait(result.map(items.mapFromRow));
 }
 
 
