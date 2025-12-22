@@ -30,6 +30,42 @@ class AddItemController extends ChangeNotifier {
     notifyListeners();
   }
 
+
+// Refresh all tags (useful after creates from the bottom sheet)
+Future<void> refreshTags() async {
+  allTags = await db.getAllTags();
+  notifyListeners();
+}
+
+// Create a tag and select it
+Future<Tag> createAndSelectTag(String name) async {
+  final tag = await db.upsertTagByName(name);
+  // Merge into local list if missing
+  if (!allTags.any((t) => t.id == tag.id)) {
+    allTags = [...allTags, tag];
+  }
+  selectedTagIds.add(tag.id);
+  notifyListeners();
+  return tag;
+}
+
+
+  // Apply a whole set (used by the bottom sheet when tapping Done)
+  void setSelectedTags(Iterable<int> ids) {
+    selectedTagIds
+      ..clear()
+      ..addAll(ids);
+    notifyListeners();
+  }
+  // Helper to render chips safely
+  Tag? tagById(int id) {
+    try {
+      return allTags.firstWhere((t) => t.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> addNewTag() async {
     final name = newTagName.trim();
     if (name.isEmpty) return;

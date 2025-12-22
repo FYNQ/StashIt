@@ -93,25 +93,25 @@ class AppDatabase extends _$AppDatabase {
       );
 
 
-// Tags
 
-// Fetch a tag by name (case-sensitive; adjust if needed)
+// Fetch a tag by name
 Future<Tag?> getTagByName(String name) async {
-  return (select(tags)..where((t) => t.name.equals(name))).getSingleOrNull();
+  final trimmed = name.trim();
+  if (trimmed.isEmpty) return null;
+  return (select(tags)..where((t) => t.name.equals(trimmed))).getSingleOrNull();
 }
 
+
+// Create if missing; return the tag. Handles UNIQUE(name) races.
 Future<Tag> upsertTagByName(String name, {String? color}) async {
   final trimmed = name.trim();
   if (trimmed.isEmpty) {
     throw ArgumentError('Tag name cannot be empty');
   }
 
-  // Try existing
-  final existing =
-      await (select(tags)..where((t) => t.name.equals(trimmed))).getSingleOrNull();
+  final existing = await getTagByName(trimmed);
   if (existing != null) return existing;
 
-  // Insert new; handle race via catch → requery
   try {
     final id = await into(tags).insert(
       TagsCompanion.insert(
@@ -121,9 +121,8 @@ Future<Tag> upsertTagByName(String name, {String? color}) async {
     );
     return (select(tags)..where((t) => t.id.equals(id))).getSingle();
   } catch (_) {
-    // Likely unique constraint from a race; requery
-    final fallback =
-        await (select(tags)..where((t) => t.name.equals(trimmed))).getSingleOrNull();
+    // Likely UNIQUE constraint hit due to race; fetch again
+    final fallback = await getTagByName(trimmed);
     if (fallback != null) return fallback;
     rethrow;
   }
