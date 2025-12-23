@@ -8,8 +8,7 @@ class SearchTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Use empty string if null
-    final title = item.title ?? '';
+    final title = item.title; // non-nullable
     final content = item.content ?? '';
 
     return Card(
@@ -25,4 +24,3 @@ class SearchTile extends StatelessWidget {
     );
   }
 }
-

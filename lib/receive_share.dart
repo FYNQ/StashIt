@@ -16,40 +16,30 @@ class _ReceiveSharePageState extends State<ReceiveSharePage> {
   void initState() {
     super.initState();
 
-    // For receiving shared files when app is in background or foreground
+    // Unified stream for both files and text
     _intentDataStreamSubscription =
-        ReceiveSharingIntent.getMediaStream().listen((List<SharedMediaFile> files) {
+        ReceiveSharingIntent.instance.getMediaStream().listen((List<SharedMediaFile> files) {
       setState(() {
-        sharedFiles = files.map((f) => f.path).toList();
+        // If it's text, we extract it from the path
+        if (files.isNotEmpty && (files.first.type == SharedMediaType.text || files.first.type == SharedMediaType.url)) {
+          sharedText = files.first.path;
+        } else {
+          sharedFiles = files.map((f) => f.path).toList();
+        }
       });
-      print("Shared files: $sharedFiles");
     }, onError: (err) {
       print("getMediaStream error: $err");
     });
 
-    // For receiving shared text/links
-    ReceiveSharingIntent.getTextStream().listen((String value) {
-      setState(() {
-        sharedText = value;
-      });
-      print("Shared text: $sharedText");
-    }, onError: (err) {
-      print("getTextStream error: $err");
-    });
-
-    // When app is launched via share
-    ReceiveSharingIntent.getInitialMedia().then((List<SharedMediaFile> files) {
+    // Handle initial media/text
+    ReceiveSharingIntent.instance.getInitialMedia().then((List<SharedMediaFile> files) {
       if (files.isNotEmpty) {
         setState(() {
-          sharedFiles = files.map((f) => f.path).toList();
-        });
-      }
-    });
-
-    ReceiveSharingIntent.getInitialText().then((String? text) {
-      if (text != null) {
-        setState(() {
-          sharedText = text;
+          if (files.first.type == SharedMediaType.text || files.first.type == SharedMediaType.url) {
+            sharedText = files.first.path;
+          } else {
+            sharedFiles = files.map((f) => f.path).toList();
+          }
         });
       }
     });
@@ -64,7 +54,7 @@ class _ReceiveSharePageState extends State<ReceiveSharePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Shared to StashIt")),
+      appBar: AppBar(title: const Text("Shared to StashIt")),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -79,4 +69,3 @@ class _ReceiveSharePageState extends State<ReceiveSharePage> {
     );
   }
 }
-
