@@ -30,7 +30,22 @@ class _AddItemScreenState extends State<AddItemScreen> {
     controller = AddItemController(widget.database)
       ..link = widget.sharedText
       ..attachments = List<AttachmentFile>.from(widget.attachments);
+
     _futureTags = widget.database.getAllTags();
+
+    // Prefill from YouTube link (async)
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      setState(() => _working = true);
+      try {
+        await controller.prefillFromLink();
+        // Reload tags after potential "youtube" tag creation
+        setState(() {
+          _futureTags = widget.database.getAllTags();
+        });
+      } finally {
+        if (mounted) setState(() => _working = false);
+      }
+    });
   }
 
   Future<void> _reloadTags() async {
@@ -125,18 +140,14 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
                 const SizedBox(height: 12),
 
-                // Tags section (select existing + create new)
                 Row(
                   children: [
-                    const Text(
-                      'Tags',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
+                    const Text('Tags', style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(width: 8),
                     if (_working)
                       const SizedBox(
-                        height: 16,
                         width: 16,
+                        height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                     const Spacer(),
@@ -153,8 +164,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
                   future: _futureTags,
                   builder: (context, snap) {
                     final tags = snap.data ?? const <Tag>[];
-                    if (snap.connectionState == ConnectionState.waiting &&
-                        tags.isEmpty) {
+                    if (snap.connectionState == ConnectionState.waiting && tags.isEmpty) {
                       return const Padding(
                         padding: EdgeInsets.symmetric(vertical: 8),
                         child: LinearProgressIndicator(),

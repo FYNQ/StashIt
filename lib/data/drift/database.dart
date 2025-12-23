@@ -117,20 +117,21 @@ class AppDatabase extends _$AppDatabase {
   Future<int> insertSharedData({
     String? text,
     String? title,
+    String? link, // NEW
   }) async {
     final now = DateTime.now();
 
     final id = await into(items).insert(
       ItemsCompanion.insert(
-        title: title ?? _deriveTitle(text),
+        title: title ?? _deriveTitle(text ?? link),
         content: Value(text),
+        link: Value(link), // NEW
         updatedAt: Value(now),
       ),
     );
 
     return id;
   }
-
   // --------------------------------------------------
   // ATTACHMENTS
   // --------------------------------------------------
