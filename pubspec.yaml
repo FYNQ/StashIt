@@ -39,6 +39,7 @@ dependencies:
   drift_flutter: ^0.2.8
   path_provider: ^2.1.5
   sqlite3_flutter_libs: ^0.5.24
+  receive_sharing_intent: ^1.4.5
   # receive_sharing_intent: ^1.6.0
 
 dev_dependencies:

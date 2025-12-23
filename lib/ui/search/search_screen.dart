@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'search_controller.dart';
 import '../../data/drift/database.dart';
-import '../add_item/item_detail_screen.dart'; // ItemDetailScreen
+import '../add_item/item_detail_screen.dart';
+import 'tag_filter_bar.dart';
+import '../tags/tag_manager_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   final ItemSearchController controller;
@@ -24,8 +26,6 @@ class _SearchScreenState extends State<SearchScreen> {
     _textController = TextEditingController(
       text: widget.controller.query,
     );
-
-    // Keep text field in sync with controller
     widget.controller.addListener(_syncText);
   }
 
@@ -48,12 +48,30 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final db = widget.controller.db;
+
     return AnimatedBuilder(
       animation: widget.controller,
       builder: (context, _) {
         return Scaffold(
           appBar: AppBar(
             title: const Text('Search'),
+            actions: [
+              IconButton(
+                tooltip: 'Manage tags',
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => TagManagerScreen(database: db),
+                    ),
+                  );
+                  // Optional: reload filter chips after returning
+                  setState(() {});
+                },
+                icon: const Icon(Icons.label),
+              ),
+            ],
           ),
           body: Column(
             children: [
@@ -69,6 +87,10 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
               ),
 
+              // Tag filter bar
+              TagFilterBar(database: db, controller: widget.controller),
+              const SizedBox(height: 8),
+
               if (widget.controller.isLoading)
                 const Padding(
                   padding: EdgeInsets.all(16),
@@ -83,7 +105,6 @@ class _SearchScreenState extends State<SearchScreen> {
                     return ListTile(
                       title: Text(item.title),
                       onTap: () {
-                        // Navigate to detail screen with DB (for attachments)
                         Navigator.push(
                           context,
                           MaterialPageRoute(

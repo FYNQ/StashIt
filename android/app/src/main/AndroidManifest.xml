@@ -18,31 +18,42 @@
 				android:name="io.flutter.embedding.android.NormalTheme"
 				android:resource="@style/NormalTheme" />
 
+
+
 			<!-- Launcher -->
 			<intent-filter>
 				<action android:name="android.intent.action.MAIN"/>
 				<category android:name="android.intent.category.LAUNCHER"/>
 			</intent-filter>
 
-			<!-- Share text -->
+			<!-- Share plain text -->
 			<intent-filter>
 				<action android:name="android.intent.action.SEND"/>
 				<category android:name="android.intent.category.DEFAULT"/>
 				<data android:mimeType="text/plain"/>
 			</intent-filter>
 
-			<!-- Share single file -->
+			<!-- Share single image (optional) -->
 			<intent-filter>
 				<action android:name="android.intent.action.SEND"/>
 				<category android:name="android.intent.category.DEFAULT"/>
 				<data android:mimeType="image/*"/>
 			</intent-filter>
 
-			<!-- Share multiple files -->
+			<!-- Share single file (any type) -->
 			<intent-filter>
+				<action android:name="android.intent.action.SEND"/>
 				<category android:name="android.intent.category.DEFAULT"/>
 				<data android:mimeType="*/*"/>
 			</intent-filter>
+
+			<!-- Share multiple files (any type) -->
+			<intent-filter>
+				<action android:name="android.intent.action.SEND_MULTIPLE"/>
+				<category android:name="android.intent.category.DEFAULT"/>
+				<data android:mimeType="*/*"/>
+			</intent-filter>
+
 
 		</activity>
 

@@ -189,6 +189,21 @@ class AppDatabase extends _$AppDatabase {
 
   Future<List<Tag>> getAllTags() => select(tags).get();
 
+  Future<List<Tag>> getTagsForItem(int itemId) async {
+    final result = await customSelect(
+      '''
+      SELECT tags.*
+      FROM tags
+      JOIN item_tags ON item_tags.tag_id = tags.id
+      WHERE item_tags.item_id = ?
+      ORDER BY tags.name
+      ''',
+      variables: [Variable.withInt(itemId)],
+      readsFrom: {tags, itemTags},
+    ).get();
+    return Future.wait(result.map(tags.mapFromRow));
+  }
+
   Future<void> attachTag({
     required int itemId,
     required int tagId,
@@ -198,6 +213,15 @@ class AppDatabase extends _$AppDatabase {
       ItemTagsCompanion.insert(itemId: itemId, tagId: tagId),
       mode: InsertMode.insertOrIgnore,
     );
+  }
+
+  Future<void> detachTag({
+    required int itemId,
+    required int tagId,
+  }) async {
+    await (delete(itemTags)
+          ..where((t) => t.itemId.equals(itemId) & t.tagId.equals(tagId)))
+        .go();
   }
 
   Future<Tag?> getTagByName(String name) async {
@@ -230,6 +254,12 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
+  Future<void> deleteTagById(int tagId) async {
+    await transaction(() async {
+      await (delete(itemTags)..where((t) => t.tagId.equals(tagId))).go();
+      await (delete(tags)..where((t) => t.id.equals(tagId))).go();
+    });
+  }
   // --------------------------------------------------
   // DELETE
   // --------------------------------------------------

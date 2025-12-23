@@ -8,8 +8,11 @@ class AddItemController extends ChangeNotifier {
   String title = '';
   bool isSaving = false;
 
-  // New: incoming attachments (e.g., screenshots)
+  // Incoming attachments (e.g., screenshots)
   List<AttachmentFile> attachments = [];
+
+  // Selected tags to attach on save
+  final Set<int> tagIds = <int>{};
 
   AddItemController(this.db);
 
@@ -22,7 +25,8 @@ class AddItemController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final effectiveTitle = title.isNotEmpty ? title : (hasLink ? null : 'Screenshot');
+      final effectiveTitle =
+          title.isNotEmpty ? title : (hasLink ? null : 'Screenshot');
 
       final itemId = await db.insertSharedData(
         text: hasLink ? link : null,
@@ -31,6 +35,10 @@ class AddItemController extends ChangeNotifier {
 
       if (hasAttachments) {
         await db.addAttachments(itemId: itemId, files: attachments);
+      }
+
+      for (final tagId in tagIds) {
+        await db.attachTag(itemId: itemId, tagId: tagId);
       }
     } finally {
       isSaving = false;
