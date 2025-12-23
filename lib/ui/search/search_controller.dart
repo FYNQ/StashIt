@@ -31,6 +31,25 @@ class ItemSearchController extends ChangeNotifier {
   // Public API
   // --------------------
 
+  /// Delete all items for the currently selected tag.
+  /// Returns how many items were deleted.
+  Future<int> deleteAllForCurrentTag() async {
+    if (_tagId == null) return 0;
+
+    int deleted = 0;
+    try {
+      final ids = await db.getItemIdsByTag(_tagId!);
+      if (ids.isEmpty) return 0;
+
+      await db.deleteItemsByIds(ids);
+      deleted = ids.length;
+    } catch (e) {
+      debugPrint('deleteAllForCurrentTag failed: $e');
+    }
+    await _search();
+    return deleted;
+  }
+
 // Delete one item and refresh results
 Future<void> deleteItem(int id) async {
   try {

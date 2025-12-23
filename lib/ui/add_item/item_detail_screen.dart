@@ -111,6 +111,31 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     await _reloadTags();
   }
 
+  Future<void> _deleteThisItem() async {
+    final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Delete item?'),
+            content: Text('This will permanently delete "${widget.item.title}".'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!ok) return;
+    await widget.database.deleteItemById(widget.item.id);
+    if (mounted) Navigator.pop(context); // back to list
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
@@ -123,6 +148,11 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             tooltip: 'Attach tag',
             onPressed: _attachTagFlow,
             icon: const Icon(Icons.label_important_outline),
+          ),
+          IconButton(
+            tooltip: 'Delete item',
+            onPressed: _deleteThisItem,
+            icon: const Icon(Icons.delete_outline),
           ),
         ],
       ),

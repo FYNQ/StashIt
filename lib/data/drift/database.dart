@@ -111,6 +111,23 @@ class AppDatabase extends _$AppDatabase {
       );
 
   // --------------------------------------------------
+  // BULK DELETE HELPERS
+  // --------------------------------------------------
+
+  // Get all item IDs for a given tag
+  Future<List<int>> getItemIdsByTag(int tagId) async {
+    final rows = await (select(itemTags)..where((t) => t.tagId.equals(tagId))).get();
+    // Unique IDs
+    return rows.map((r) => r.itemId).toSet().toList();
+  }
+
+  // Count items for a given tag
+  Future<int> countItemsByTag(int tagId) async {
+    final ids = await getItemIdsByTag(tagId);
+    return ids.length;
+  }
+
+  // --------------------------------------------------
   // INSERT
   // --------------------------------------------------
 
