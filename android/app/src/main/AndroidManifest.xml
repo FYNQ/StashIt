@@ -41,6 +41,27 @@
 				<data android:mimeType="image/*"/>
 			</intent-filter>
 
+			<!-- Receive multiple images -->
+			<intent-filter>
+			    <action android:name="android.intent.action.SEND_MULTIPLE" />
+			    <category android:name="android.intent.category.DEFAULT" />
+			    <data android:mimeType="image/*" />
+			</intent-filter>
+
+			<!-- Receive a single video -->
+			<intent-filter>
+				<action android:name="android.intent.action.SEND" />
+				<category android:name="android.intent.category.DEFAULT" />
+				<data android:mimeType="video/*" />
+			</intent-filter>
+
+			<!-- Receive multiple videos -->
+			<intent-filter>
+				<action android:name="android.intent.action.SEND_MULTIPLE" />
+				<category android:name="android.intent.category.DEFAULT" />
+				<data android:mimeType="video/*" />
+			</intent-filter>
+
 			<!-- Share single file (any type) -->
 			<intent-filter>
 				<action android:name="android.intent.action.SEND"/>
