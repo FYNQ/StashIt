@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/drift/database.dart';
 import 'add_item_controller.dart';
 import '../media/video_viewer_screen.dart';
+import '../media/image_viewer_screen.dart';
 
 class AddItemScreen extends StatefulWidget {
   final AppDatabase database;
@@ -34,6 +35,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
     _futureTags = widget.database.getAllTags();
 
+    // Prefill from YouTube link (async)
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       setState(() => _working = true);
       try {
@@ -46,36 +48,6 @@ class _AddItemScreenState extends State<AddItemScreen> {
       }
     });
   }
-
-  // --- Video helpers ---
-  bool _isVideo(AttachmentFile a) {
-    final mt = (a.mimeType ?? '').toLowerCase();
-    if (mt.startsWith('video/')) return true;
-    final p = a.path.toLowerCase();
-    return p.endsWith('.mp4') || p.endsWith('.mov') || p.endsWith('.m4v') ||
-           p.endsWith('.webm') || p.endsWith('.mkv') || p.endsWith('.avi');
-  }
-
-  Widget _thumbFor(AttachmentFile a) {
-    if (_isVideo(a)) {
-      return Stack(
-        fit: StackFit.expand,
-        children: const [
-          ColoredBox(color: Color(0x11000000)),
-          Center(child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 56)),
-        ],
-      );
-    }
-    return Image.file(
-      File(a.path),
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => const ColoredBox(
-        color: Colors.black12,
-        child: Center(child: Icon(Icons.image_not_supported)),
-      ),
-    );
-  }
-  // --- end helpers ---
 
   Future<void> _reloadTags() async {
     setState(() {
@@ -118,7 +90,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
     setState(() => _working = true);
     try {
       final tag = await widget.database.upsertTagByName(name);
-      controller.tagIds.add(tag.id);
+      controller.tagIds.add(tag.id); // auto-select the new tag
       await _reloadTags();
     } catch (e) {
       if (!mounted) return;
@@ -129,6 +101,65 @@ class _AddItemScreenState extends State<AddItemScreen> {
       if (mounted) setState(() => _working = false);
     }
   }
+
+  // -------------------
+  // Media helpers
+  // -------------------
+  bool _isVideo(AttachmentFile a) {
+    final mt = (a.mimeType ?? '').toLowerCase();
+    if (mt.startsWith('video/')) return true;
+    final p = a.path.toLowerCase();
+    return p.endsWith('.mp4') || p.endsWith('.mov') || p.endsWith('.m4v') ||
+           p.endsWith('.webm') || p.endsWith('.mkv') || p.endsWith('.avi');
+  }
+
+  bool _isImage(AttachmentFile a) {
+    final mt = (a.mimeType ?? '').toLowerCase();
+    if (mt.startsWith('image/')) return true;
+    final p = a.path.toLowerCase();
+    return p.endsWith('.jpg') || p.endsWith('.jpeg') || p.endsWith('.png') ||
+           p.endsWith('.gif') || p.endsWith('.webp') || p.endsWith('.heic') ||
+           p.endsWith('.heif') || p.endsWith('.bmp') || p.endsWith('.tif') ||
+           p.endsWith('.tiff');
+  }
+
+  Widget _thumbFor(AttachmentFile a) {
+    if (_isVideo(a)) {
+      return Stack(
+        fit: StackFit.expand,
+        children: const [
+          ColoredBox(color: Color(0x11000000)),
+          Center(child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 56)),
+        ],
+      );
+    }
+    return Image.file(
+      File(a.path),
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => const ColoredBox(
+        color: Colors.black12,
+        child: Center(child: Icon(Icons.image_not_supported)),
+      ),
+    );
+  }
+
+  void _openImageViewer(AttachmentFile tapped) {
+    final images = controller.attachments.where(_isImage).toList();
+    final paths = images.map((e) => e.path).toList();
+    final heroTags = paths; // use file path as hero tag
+    final initialIndex = images.indexWhere((e) => e.path == tapped.path);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ImageViewerScreen(
+          paths: paths,
+          initialIndex: initialIndex < 0 ? 0 : initialIndex,
+          heroTags: heroTags,
+        ),
+      ),
+    );
+  }
+  // -------------------
 
   @override
   Widget build(BuildContext context) {
@@ -246,6 +277,11 @@ class _AddItemScreenState extends State<AddItemScreen> {
                       itemCount: controller.attachments.length,
                       itemBuilder: (_, i) {
                         final a = controller.attachments[i];
+                        final child = ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: _thumbFor(a),
+                        );
+
                         return GestureDetector(
                           onTap: () {
                             if (_isVideo(a)) {
@@ -255,12 +291,11 @@ class _AddItemScreenState extends State<AddItemScreen> {
                                   builder: (_) => VideoViewerScreen(filePath: a.path),
                                 ),
                               );
+                            } else if (_isImage(a)) {
+                              _openImageViewer(a);
                             }
                           },
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: _thumbFor(a),
-                          ),
+                          child: Hero(tag: a.path, child: child),
                         );
                       },
                     ),

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../data/drift/database.dart';
 import '../media/video_viewer_screen.dart';
+import '../media/image_viewer_screen.dart';
 
 class ItemDetailScreen extends StatefulWidget {
   final Item item;
@@ -134,16 +135,26 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
 
     if (!ok) return;
     await widget.database.deleteItemById(widget.item.id);
-    if (mounted) Navigator.pop(context);
+    if (mounted) Navigator.pop(context); // back to list
   }
 
-  // --- Video helpers ---
+  // --- Media helpers ---
   bool _isVideoPath(String path, [String? mime]) {
     final mt = (mime ?? '').toLowerCase();
     if (mt.startsWith('video/')) return true;
     final p = path.toLowerCase();
     return p.endsWith('.mp4') || p.endsWith('.mov') || p.endsWith('.m4v') ||
            p.endsWith('.webm') || p.endsWith('.mkv') || p.endsWith('.avi');
+  }
+
+  bool _isImagePath(String path, [String? mime]) {
+    final mt = (mime ?? '').toLowerCase();
+    if (mt.startsWith('image/')) return true;
+    final p = path.toLowerCase();
+    return p.endsWith('.jpg') || p.endsWith('.jpeg') || p.endsWith('.png') ||
+           p.endsWith('.gif') || p.endsWith('.webp') || p.endsWith('.heic') ||
+           p.endsWith('.heif') || p.endsWith('.bmp') || p.endsWith('.tif') ||
+           p.endsWith('.tiff');
   }
 
   Widget _attachmentThumb(Attachment a) {
@@ -162,6 +173,23 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
       errorBuilder: (_, __, ___) => const ColoredBox(
         color: Colors.black12,
         child: Center(child: Icon(Icons.image_not_supported)),
+      ),
+    );
+  }
+
+  void _openImageViewer(Attachment tapped, List<Attachment> all) {
+    final images = all.where((e) => _isImagePath(e.path, e.mimeType)).toList();
+    final paths = images.map((e) => e.path).toList();
+    final heroTags = paths; // use file path as hero tag
+    final initialIndex = images.indexWhere((e) => e.path == tapped.path);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ImageViewerScreen(
+          paths: paths,
+          initialIndex: initialIndex < 0 ? 0 : initialIndex,
+          heroTags: heroTags,
+        ),
       ),
     );
   }
@@ -208,7 +236,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                 Text("Updated At: ${item.updatedAt}"),
                 const SizedBox(height: 16),
 
-                // Tags
+                // Tags section
                 FutureBuilder<List<Tag>>(
                   future: _futureTags,
                   builder: (context, snapT) {
@@ -265,6 +293,11 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                     itemCount: attachments.length,
                     itemBuilder: (_, i) {
                       final a = attachments[i];
+                      final child = ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: _attachmentThumb(a),
+                      );
+
                       return GestureDetector(
                         onTap: () {
                           if (_isVideoPath(a.path, a.mimeType)) {
@@ -274,12 +307,11 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                                 builder: (_) => VideoViewerScreen(filePath: a.path),
                               ),
                             );
+                          } else if (_isImagePath(a.path, a.mimeType)) {
+                            _openImageViewer(a, attachments);
                           }
                         },
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: _attachmentThumb(a),
-                        ),
+                        child: Hero(tag: a.path, child: child),
                       );
                     },
                   ),
