@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../data/drift/database.dart';
+import '../media/video_viewer_screen.dart';
 
 class ItemDetailScreen extends StatefulWidget {
   final Item item;
@@ -133,8 +134,38 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
 
     if (!ok) return;
     await widget.database.deleteItemById(widget.item.id);
-    if (mounted) Navigator.pop(context); // back to list
+    if (mounted) Navigator.pop(context);
   }
+
+  // --- Video helpers ---
+  bool _isVideoPath(String path, [String? mime]) {
+    final mt = (mime ?? '').toLowerCase();
+    if (mt.startsWith('video/')) return true;
+    final p = path.toLowerCase();
+    return p.endsWith('.mp4') || p.endsWith('.mov') || p.endsWith('.m4v') ||
+           p.endsWith('.webm') || p.endsWith('.mkv') || p.endsWith('.avi');
+  }
+
+  Widget _attachmentThumb(Attachment a) {
+    if (_isVideoPath(a.path, a.mimeType)) {
+      return Stack(
+        fit: StackFit.expand,
+        children: const [
+          ColoredBox(color: Color(0x11000000)),
+          Center(child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 56)),
+        ],
+      );
+    }
+    return Image.file(
+      File(a.path),
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => const ColoredBox(
+        color: Colors.black12,
+        child: Center(child: Icon(Icons.image_not_supported)),
+      ),
+    );
+  }
+  // --- end helpers ---
 
   @override
   Widget build(BuildContext context) {
@@ -177,7 +208,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                 Text("Updated At: ${item.updatedAt}"),
                 const SizedBox(height: 16),
 
-                // Tags section
+                // Tags
                 FutureBuilder<List<Tag>>(
                   future: _futureTags,
                   builder: (context, snapT) {
@@ -234,15 +265,20 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                     itemCount: attachments.length,
                     itemBuilder: (_, i) {
                       final a = attachments[i];
-                      return ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.file(
-                          File(a.path),
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const ColoredBox(
-                            color: Colors.black12,
-                            child: Center(child: Icon(Icons.image_not_supported)),
-                          ),
+                      return GestureDetector(
+                        onTap: () {
+                          if (_isVideoPath(a.path, a.mimeType)) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => VideoViewerScreen(filePath: a.path),
+                              ),
+                            );
+                          }
+                        },
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: _attachmentThumb(a),
                         ),
                       );
                     },

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../data/drift/database.dart';
 import 'add_item_controller.dart';
+import '../media/video_viewer_screen.dart';
 
 class AddItemScreen extends StatefulWidget {
   final AppDatabase database;
@@ -33,12 +34,10 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
     _futureTags = widget.database.getAllTags();
 
-    // Prefill from YouTube link (async)
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       setState(() => _working = true);
       try {
         await controller.prefillFromLink();
-        // Reload tags after potential "youtube" tag creation
         setState(() {
           _futureTags = widget.database.getAllTags();
         });
@@ -47,6 +46,36 @@ class _AddItemScreenState extends State<AddItemScreen> {
       }
     });
   }
+
+  // --- Video helpers ---
+  bool _isVideo(AttachmentFile a) {
+    final mt = (a.mimeType ?? '').toLowerCase();
+    if (mt.startsWith('video/')) return true;
+    final p = a.path.toLowerCase();
+    return p.endsWith('.mp4') || p.endsWith('.mov') || p.endsWith('.m4v') ||
+           p.endsWith('.webm') || p.endsWith('.mkv') || p.endsWith('.avi');
+  }
+
+  Widget _thumbFor(AttachmentFile a) {
+    if (_isVideo(a)) {
+      return Stack(
+        fit: StackFit.expand,
+        children: const [
+          ColoredBox(color: Color(0x11000000)),
+          Center(child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 56)),
+        ],
+      );
+    }
+    return Image.file(
+      File(a.path),
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => const ColoredBox(
+        color: Colors.black12,
+        child: Center(child: Icon(Icons.image_not_supported)),
+      ),
+    );
+  }
+  // --- end helpers ---
 
   Future<void> _reloadTags() async {
     setState(() {
@@ -89,7 +118,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
     setState(() => _working = true);
     try {
       final tag = await widget.database.upsertTagByName(name);
-      controller.tagIds.add(tag.id); // auto-select the new tag
+      controller.tagIds.add(tag.id);
       await _reloadTags();
     } catch (e) {
       if (!mounted) return;
@@ -217,15 +246,20 @@ class _AddItemScreenState extends State<AddItemScreen> {
                       itemCount: controller.attachments.length,
                       itemBuilder: (_, i) {
                         final a = controller.attachments[i];
-                        return ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.file(
-                            File(a.path),
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const ColoredBox(
-                              color: Colors.black12,
-                              child: Center(child: Icon(Icons.image_not_supported)),
-                            ),
+                        return GestureDetector(
+                          onTap: () {
+                            if (_isVideo(a)) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => VideoViewerScreen(filePath: a.path),
+                                ),
+                              );
+                            }
+                          },
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: _thumbFor(a),
                           ),
                         );
                       },
