@@ -6,7 +6,6 @@ import '../media/video_viewer_screen.dart';
 import '../media/image_viewer_screen.dart';
 import '../../util/share_out.dart';
 
-
 class AddItemScreen extends StatefulWidget {
   final AppDatabase database;
   final String? sharedText;
@@ -174,28 +173,28 @@ class _AddItemScreenState extends State<AddItemScreen> {
         return Scaffold(
           appBar: AppBar(
             title: const Text('Add item'),
-			actions: [
-				IconButton(
-				  tooltip: 'Share',
-				  onPressed: () {
-					final textParts = <String>[];
-					if (controller.title.trim().isNotEmpty) {
-					  textParts.add(controller.title.trim());
-					}
-					if ((controller.link ?? '').trim().isNotEmpty) {
-					  textParts.add(controller.link!.trim());
-					}
-					final text = textParts.join('\n\n');
-					shareAttachments(
-					  context: context,
-					  attachments: controller.attachments,
-					  text: text.isEmpty ? null : text,
-					  subject: controller.title.isEmpty ? null : controller.title,
-					);
-				  },
-				  icon: const Icon(Icons.share_outlined),
-				),
-			  ],
+            actions: [
+              IconButton(
+                tooltip: 'Share',
+                onPressed: () {
+                  final textParts = <String>[];
+                  if (controller.title.trim().isNotEmpty) {
+                    textParts.add(controller.title.trim());
+                  }
+                  if ((controller.link ?? '').trim().isNotEmpty) {
+                    textParts.add(controller.link!.trim());
+                  }
+                  final text = textParts.join('\n\n');
+                  shareAttachments(
+                    context: context,
+                    attachments: controller.attachments,
+                    text: text.isEmpty ? null : text,
+                    subject: controller.title.isEmpty ? null : controller.title,
+                  );
+                },
+                icon: const Icon(Icons.share_outlined),
+              ),
+            ],
           ),
           body: Padding(
             padding: const EdgeInsets.all(16),
@@ -335,7 +334,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
                         ? null
                         : () async {
                             await controller.save();
-                            if (mounted) Navigator.pop(context);
+                            if (mounted) Navigator.pop(context, true); // <- return saved = true
                           },
                     child: controller.isSaving
                         ? const SizedBox(

@@ -35,8 +35,7 @@ Future<void> main() async {
       // Check if it's text (SharedMediaFile handles both files and text)
       // For plain text, the content is in .path
       final firstFile = initialMedia.first;
-      
-      // If you specifically want to handle text shares vs file shares:
+
       if (firstFile.type == SharedMediaType.text || firstFile.type == SharedMediaType.url) {
         nav.push(
           MaterialPageRoute(
@@ -45,7 +44,12 @@ Future<void> main() async {
               sharedText: firstFile.path,
             ),
           ),
-        );
+        ).then((saved) {
+          if (saved == true) {
+            // Refresh the search with current query (respects tag filter too)
+            searchController.updateQuery(searchController.query);
+          }
+        });
       } else {
         final atts = initialMedia
             .map((f) => AttachmentFile(f.path, mimeType: f.mimeType))
@@ -58,7 +62,11 @@ Future<void> main() async {
               attachments: atts,
             ),
           ),
-        );
+        ).then((saved) {
+          if (saved == true) {
+            searchController.updateQuery(searchController.query);
+          }
+        });
       }
     });
   }
@@ -78,7 +86,11 @@ Future<void> main() async {
             sharedText: first.path,
           ),
         ),
-      );
+      ).then((saved) {
+        if (saved == true) {
+          searchController.updateQuery(searchController.query);
+        }
+      });
     } else {
       final atts = files
           .map((f) => AttachmentFile(f.path, mimeType: f.mimeType))
@@ -89,7 +101,11 @@ Future<void> main() async {
           database: database,
           attachments: atts,
         ),
-      ));
+      )).then((saved) {
+        if (saved == true) {
+          searchController.updateQuery(searchController.query);
+        }
+      });
     }
   }, onError: (err) {
     debugPrint("getMediaStream error: $err");
