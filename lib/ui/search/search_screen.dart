@@ -20,24 +20,30 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   late final TextEditingController _textController;
 
-  @override
-  void initState() {
-    super.initState();
-    _textController = TextEditingController(
-      text: widget.controller.query,
-    );
-    widget.controller.addListener(_syncText);
-  }
+@override
+void initState() {
+  super.initState();
+  _textController = TextEditingController(
+    text: widget.controller.query,
+  );
+  widget.controller.addListener(_syncText);
 
-  void _syncText() {
-    final query = widget.controller.query;
-    if (_textController.text != query) {
-      _textController.text = query;
-      _textController.selection = TextSelection.fromPosition(
-        TextPosition(offset: query.length),
-      );
-    }
+  // Trigger initial load so recent items appear on first open
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    widget.controller.updateQuery(widget.controller.query); // '' loads recent
+  });
+}
+
+void _syncText() {
+  final query = widget.controller.query;
+  if (_textController.text != query) {
+    // Keep cursor at the end after syncing
+    _textController.value = TextEditingValue(
+      text: query,
+      selection: TextSelection.collapsed(offset: query.length),
+    );
   }
+}
 
   @override
   void dispose() {

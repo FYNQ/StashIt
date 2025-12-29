@@ -15,6 +15,8 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   database = AppDatabase();
+  // Ensure FTS table + triggers exist, and index is populated
+  await database.ensureFtsSetup();
   searchController = ItemSearchController(database);
 
   await ShareIntentHandler.init();

@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 
 import 'tables/items.dart';
 // Removed: import 'tables/items_fts.dart';
@@ -27,7 +28,7 @@ class AttachmentFile {
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
     final dir = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dir.path, 'stashit.db')); // cleaned path
+    final file = File(p.join(dir.path, 'stashit.db'));
     return NativeDatabase(file);
   });
 }
@@ -58,7 +59,94 @@ class AppDatabase extends _$AppDatabase {
     }
     final t = text.trim();
     return t.length > 50 ? '${t.substring(0, 50)}…' : t;
-    // ellipsis char
+  }
+
+  // Convert user input into FTS prefix query: "foo bar" -> "foo* AND bar*"
+  String _ftsPrefixQuery(String input) {
+    final parts = input
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .map((p) {
+          final cleaned = p.replaceAll('"', '');
+          return '$cleaned*';
+        })
+        .toList();
+    if (parts.isEmpty) return '';
+    return parts.join(' AND ');
+  }
+
+  // --------------------------------------------------
+  // FTS ENSURE + REBUILD
+  // --------------------------------------------------
+
+  // Ensure FTS virtual table + triggers exist, and backfill index if empty
+  Future<void> ensureFtsSetup() async {
+    // 1) Ensure VIRTUAL TABLE exists
+    await customStatement('''
+      CREATE VIRTUAL TABLE IF NOT EXISTS items_fts
+      USING fts5(title, content);
+    ''');
+
+    // 2) Ensure triggers exist (wrap to ignore "already exists" errors)
+    Future<void> _try(String sql) async {
+      try {
+        await customStatement(sql);
+      } catch (_) {
+        // ignore
+      }
+    }
+
+    // Insert (content + link)
+    await _try('''
+      CREATE TRIGGER IF NOT EXISTS items_ai AFTER INSERT ON items
+      BEGIN
+        INSERT INTO items_fts(rowid, title, content)
+        VALUES (
+          new.id,
+          new.title,
+          trim(coalesce(new.content, '') || ' ' || coalesce(new.link, ''))
+        );
+      END;
+    ''');
+
+    // Update (content + link)
+    await _try('''
+      CREATE TRIGGER IF NOT EXISTS items_au AFTER UPDATE ON items
+      BEGIN
+        DELETE FROM items_fts WHERE rowid = old.id;
+        INSERT INTO items_fts(rowid, title, content)
+        VALUES (
+          new.id,
+          new.title,
+          trim(coalesce(new.content, '') || ' ' || coalesce(new.link, ''))
+        );
+      END;
+    ''');
+
+    // Delete
+    await _try('''
+      CREATE TRIGGER IF NOT EXISTS items_ad AFTER DELETE ON items
+      BEGIN
+        DELETE FROM items_fts WHERE rowid = old.id;
+      END;
+    ''');
+
+    // 3) Backfill if empty
+    final row = await customSelect('SELECT COUNT(*) AS c FROM items_fts').getSingleOrNull();
+    final ftsCount = (row?.data['c'] as int?) ?? 0;
+    if (ftsCount == 0) {
+      await rebuildFts();
+    }
+  }
+
+  Future<void> rebuildFts() async {
+    await customStatement('DELETE FROM items_fts;');
+    await customStatement('''
+      INSERT INTO items_fts(rowid, title, content)
+      SELECT id, title, trim(coalesce(content, '') || ' ' || coalesce(link, ''))
+      FROM items;
+    ''');
   }
 
   @override
@@ -73,20 +161,23 @@ class AppDatabase extends _$AppDatabase {
             USING fts5(title, content);
           ''');
 
-          // 3) Seed FTS from existing items
+          // 3) Seed FTS from existing items (include ALL; index content + link)
           await customStatement('''
             INSERT INTO items_fts(rowid, title, content)
-            SELECT id, title, content
-            FROM items
-            WHERE content IS NOT NULL;
+            SELECT id, title, trim(coalesce(content, '') || ' ' || coalesce(link, ''))
+            FROM items;
           ''');
 
-          // 4) Keep FTS in sync via triggers
+          // 4) Keep FTS in sync via triggers (content + link)
           await customStatement('''
             CREATE TRIGGER items_ai AFTER INSERT ON items
             BEGIN
               INSERT INTO items_fts(rowid, title, content)
-              VALUES (new.id, new.title, new.content);
+              VALUES (
+                new.id,
+                new.title,
+                trim(coalesce(new.content, '') || ' ' || coalesce(new.link, ''))
+              );
             END;
           ''');
 
@@ -95,7 +186,11 @@ class AppDatabase extends _$AppDatabase {
             BEGIN
               DELETE FROM items_fts WHERE rowid = old.id;
               INSERT INTO items_fts(rowid, title, content)
-              VALUES (new.id, new.title, new.content);
+              VALUES (
+                new.id,
+                new.title,
+                trim(coalesce(new.content, '') || ' ' || coalesce(new.link, ''))
+              );
             END;
           ''');
 
@@ -105,8 +200,6 @@ class AppDatabase extends _$AppDatabase {
               DELETE FROM items_fts WHERE rowid = old.id;
             END;
           ''');
-
-          // Done 🎉
         },
       );
 
@@ -117,7 +210,6 @@ class AppDatabase extends _$AppDatabase {
   // Get all item IDs for a given tag
   Future<List<int>> getItemIdsByTag(int tagId) async {
     final rows = await (select(itemTags)..where((t) => t.tagId.equals(tagId))).get();
-    // Unique IDs
     return rows.map((r) => r.itemId).toSet().toList();
   }
 
@@ -134,7 +226,7 @@ class AppDatabase extends _$AppDatabase {
   Future<int> insertSharedData({
     String? text,
     String? title,
-    String? link, // NEW
+    String? link,
   }) async {
     final now = DateTime.now();
 
@@ -142,13 +234,14 @@ class AppDatabase extends _$AppDatabase {
       ItemsCompanion.insert(
         title: title ?? _deriveTitle(text ?? link),
         content: Value(text),
-        link: Value(link), // NEW
+        link: Value(link),
         updatedAt: Value(now),
       ),
     );
 
     return id;
   }
+
   // --------------------------------------------------
   // ATTACHMENTS
   // --------------------------------------------------
@@ -187,7 +280,7 @@ class AppDatabase extends _$AppDatabase {
 
   Future<String> _copyIntoAttachmentsDir(String source) async {
     final dir = await getApplicationDocumentsDirectory();
-    final attachmentsDir = Directory(p.join(dir.path, 'attachments')); // cleaned path
+    final attachmentsDir = Directory(p.join(dir.path, 'attachments'));
     if (!attachmentsDir.existsSync()) {
       attachmentsDir.createSync(recursive: true);
     }
@@ -226,7 +319,6 @@ class AppDatabase extends _$AppDatabase {
     required int itemId,
     required int tagId,
   }) {
-    // Avoid duplicate key error if already attached
     return into(itemTags).insert(
       ItemTagsCompanion.insert(itemId: itemId, tagId: tagId),
       mode: InsertMode.insertOrIgnore,
@@ -278,6 +370,7 @@ class AppDatabase extends _$AppDatabase {
       await (delete(tags)..where((t) => t.id.equals(tagId))).go();
     });
   }
+
   // --------------------------------------------------
   // DELETE
   // --------------------------------------------------
@@ -304,7 +397,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // --------------------------------------------------
-  // SEARCH + FILTER (FTS)
+  // SEARCH + FILTER
   // --------------------------------------------------
 
   Future<List<Item>> getRecentItems({int limit = 50}) {
@@ -340,6 +433,9 @@ class AppDatabase extends _$AppDatabase {
       return getRecentItems();
     }
 
+    final fts = _ftsPrefixQuery(trimmed);
+
+    // 1) Try FTS (prefix)
     final result = await customSelect(
       '''
       SELECT items.*
@@ -348,27 +444,40 @@ class AppDatabase extends _$AppDatabase {
       WHERE items_fts MATCH ?
       ORDER BY bm25(items_fts)
       ''',
-      variables: [Variable.withString(trimmed)],
-      readsFrom: {items}, // items_fts is virtual (created via SQL)
+      variables: [Variable.withString(fts)],
+      readsFrom: {items},
     ).get();
 
-    return await Future.wait(result.map(items.mapFromRow));
+    if (result.isNotEmpty) {
+      return Future.wait(result.map(items.mapFromRow));
+    }
+
+    // 2) Fallback: LIKE across title/content/link (mid-word substrings)
+    debugPrint('FTS returned no results, falling back to LIKE for "$trimmed"');
+    final like = '%$trimmed%';
+    final q = select(items)
+      ..where((t) =>
+          t.title.like(like) |
+          t.content.like(like) |
+          t.link.like(like))
+      ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]);
+    return q.get();
   }
 
   Future<List<Item>> searchItemsWithTag({
     required String query,
     required int? tagId,
   }) async {
-    if (tagId == null) {
-      return searchItems(query);
-    }
+    if (tagId == null) return searchItems(query);
 
     final trimmed = query.trim();
-
     if (trimmed.isEmpty) {
       return getItemsByTag(tagId);
     }
 
+    final fts = _ftsPrefixQuery(trimmed);
+
+    // 1) Try FTS (prefix) + tag
     final result = await customSelect(
       '''
       SELECT DISTINCT items.*
@@ -381,12 +490,41 @@ class AppDatabase extends _$AppDatabase {
       ''',
       variables: [
         Variable.withInt(tagId),
-        Variable.withString(trimmed),
+        Variable.withString(fts),
       ],
-      readsFrom: {items, itemTags}, // items_fts is virtual (created via SQL)
+      readsFrom: {items, itemTags},
     ).get();
 
-    return await Future.wait(result.map(items.mapFromRow));
+    if (result.isNotEmpty) {
+      return Future.wait(result.map(items.mapFromRow));
+    }
+
+    // 2) Fallback: LIKE + tag filter
+    debugPrint('FTS tag search returned no results, fallback LIKE for "$trimmed"');
+    final like = '%$trimmed%';
+    final result2 = await customSelect(
+      '''
+      SELECT items.*
+      FROM items
+      JOIN item_tags ON item_tags.item_id = items.id
+      WHERE item_tags.tag_id = ?
+        AND (
+          items.title LIKE ? OR
+          items.content LIKE ? OR
+          items.link LIKE ?
+        )
+      ORDER BY items.updated_at DESC
+      ''',
+      variables: [
+        Variable.withInt(tagId),
+        Variable.withString(like),
+        Variable.withString(like),
+        Variable.withString(like),
+      ],
+      readsFrom: {items, itemTags},
+    ).get();
+
+    return Future.wait(result2.map(items.mapFromRow));
   }
 
   Future<List<Item>> searchItemsPaged({
@@ -397,6 +535,8 @@ class AppDatabase extends _$AppDatabase {
   }) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return [];
+
+    final fts = _ftsPrefixQuery(trimmed);
 
     final sql = StringBuffer('''
       SELECT DISTINCT items.*
@@ -411,7 +551,7 @@ class AppDatabase extends _$AppDatabase {
     }
 
     sql.write('WHERE items_fts MATCH ? ');
-    vars.add(Variable.withString(trimmed));
+    vars.add(Variable.withString(fts));
 
     if (tagId != null) {
       sql.write('AND item_tags.tag_id = ? ');
@@ -422,13 +562,64 @@ class AppDatabase extends _$AppDatabase {
     vars.add(Variable.withInt(limit));
     vars.add(Variable.withInt(offset));
 
-    final result = await customSelect(
-      sql.toString(),
-      variables: vars,
-      readsFrom: {items, if (tagId != null) itemTags}, // items_fts is virtual
-    ).get();
+    try {
+      final result = await customSelect(
+        sql.toString(),
+        variables: vars,
+        readsFrom: {items, if (tagId != null) itemTags},
+      ).get();
 
-    return await Future.wait(result.map(items.mapFromRow));
+      if (result.isNotEmpty) {
+        return Future.wait(result.map(items.mapFromRow));
+      }
+    } catch (e) {
+      debugPrint('FTS paged search failed: $e');
+    }
+
+    // Fallback LIKE (paged)
+    final like = '%$trimmed%';
+    if (tagId == null) {
+      final result = await customSelect(
+        '''
+        SELECT items.*
+        FROM items
+        WHERE items.title LIKE ? OR items.content LIKE ? OR items.link LIKE ?
+        ORDER BY items.updated_at DESC
+        LIMIT ? OFFSET ?
+        ''',
+        variables: [
+          Variable.withString(like),
+          Variable.withString(like),
+          Variable.withString(like),
+          Variable.withInt(limit),
+          Variable.withInt(offset),
+        ],
+        readsFrom: {items},
+      ).get();
+      return Future.wait(result.map(items.mapFromRow));
+    } else {
+      final result = await customSelect(
+        '''
+        SELECT items.*
+        FROM items
+        JOIN item_tags ON item_tags.item_id = items.id
+        WHERE item_tags.tag_id = ?
+          AND (items.title LIKE ? OR items.content LIKE ? OR items.link LIKE ?)
+        ORDER BY items.updated_at DESC
+        LIMIT ? OFFSET ?
+        ''',
+        variables: [
+          Variable.withInt(tagId),
+          Variable.withString(like),
+          Variable.withString(like),
+          Variable.withString(like),
+          Variable.withInt(limit),
+          Variable.withInt(offset),
+        ],
+        readsFrom: {items, itemTags},
+      ).get();
+      return Future.wait(result.map(items.mapFromRow));
+    }
   }
 
   // --------------------------------------------------

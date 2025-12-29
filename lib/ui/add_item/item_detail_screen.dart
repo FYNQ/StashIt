@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../data/drift/database.dart';
 import '../media/video_viewer_screen.dart';
 import '../media/image_viewer_screen.dart';
+import '../../util/share_out.dart';
+
 
 class ItemDetailScreen extends StatefulWidget {
   final Item item;
@@ -208,6 +210,15 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             onPressed: _attachTagFlow,
             icon: const Icon(Icons.label_important_outline),
           ),
+		  IconButton(
+			tooltip: 'Share',
+			onPressed: () => shareItem(
+			  context: context,
+			  db: widget.database,
+			  item: widget.item,
+			),
+			icon: const Icon(Icons.share_outlined),
+		  ),
           IconButton(
             tooltip: 'Delete item',
             onPressed: _deleteThisItem,
