@@ -58,6 +58,7 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   flutter_launcher_icons: "^0.13.0"
+  flutter_native_splash: ^2.4.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -101,9 +102,40 @@ flutter:
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
 
+#flutter_launcher_icons:
+#  android: "launcher_icon"
+#  ios: false # Set to true if you want to generate iOS icons as well
+#  image_path: "assets/icons/icon.png"
+
 flutter_launcher_icons:
-  android: "launcher_icon"
-  ios: false # Set to true if you want to generate iOS icons as well
-  image_path: "assets/icon/icon.png"
+  android: true
+  ios: false
+  adaptive_icon_foreground: assets/icons/foreground.png
+  adaptive_icon_background: "#121212"
+  adaptive_icon_monochrome: assets/icons/monochrome.png
+  image_path_android: assets/icons/foreground.png
+  image_path_ios: assets/icons/foreground.png
+  remove_alpha_ios: true
+
+flutter_native_splash:
+  # Common background
+  color: "#121212"
+  color_dark: "#000000"
+
+  # Pre-Android 12 + iOS image
+  image: assets/splash/splash.png
+  image_dark: assets/splash/splash.png
+
+  # How to place/scale pre-Android 12 splash
+  android_gravity: center            # or: centerCrop (fills more, may crop)
+  ios_content_mode: scaleAspectFit   # or: scaleAspectFill (fills more, may crop)
+  fullscreen: true
+
+  # Android 12+ dedicated icon image (very important)
+  android_12:
+    image: assets/splash/splash-android12.png
+    image_dark: assets/splash/splash-android12.png
+    icon_background_color: "#121212"
+    icon_background_color_dark: "#000000"
 
 
