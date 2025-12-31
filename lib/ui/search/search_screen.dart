@@ -20,30 +20,33 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   late final TextEditingController _textController;
 
-@override
-void initState() {
-  super.initState();
-  _textController = TextEditingController(
-    text: widget.controller.query,
-  );
-  widget.controller.addListener(_syncText);
+  // NEW: Key to force TagFilterBar to rebuild (and refetch tags)
+  Key _tagBarKey = UniqueKey();
 
-  // Trigger initial load so recent items appear on first open
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    widget.controller.updateQuery(widget.controller.query); // '' loads recent
-  });
-}
-
-void _syncText() {
-  final query = widget.controller.query;
-  if (_textController.text != query) {
-    // Keep cursor at the end after syncing
-    _textController.value = TextEditingValue(
-      text: query,
-      selection: TextSelection.collapsed(offset: query.length),
+  @override
+  void initState() {
+    super.initState();
+    _textController = TextEditingController(
+      text: widget.controller.query,
     );
+    widget.controller.addListener(_syncText);
+
+    // Trigger initial load so recent items appear on first open
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.controller.updateQuery(widget.controller.query); // '' loads recent
+    });
   }
-}
+
+  void _syncText() {
+    final query = widget.controller.query;
+    if (_textController.text != query) {
+      // Keep cursor at the end after syncing
+      _textController.value = TextEditingValue(
+        text: query,
+        selection: TextSelection.collapsed(offset: query.length),
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -79,6 +82,7 @@ void _syncText() {
 
     final count = await db.countItemsByTag(tagId);
     if (count == 0) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No items under this tag')),
       );
@@ -107,6 +111,7 @@ void _syncText() {
     if (!confirm) return;
 
     final deleted = await widget.controller.deleteAllForCurrentTag();
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Deleted $deleted item(s)')),
     );
@@ -140,7 +145,11 @@ void _syncText() {
                       builder: (_) => TagManagerScreen(database: db),
                     ),
                   );
-                  setState(() {});
+                  // Force TagFilterBar to rebuild and refetch tags
+                  if (!mounted) return;
+                  setState(() {
+                    _tagBarKey = UniqueKey();
+                  });
                 },
                 icon: const Icon(Icons.label),
               ),
@@ -160,8 +169,8 @@ void _syncText() {
                 ),
               ),
 
-              // Tag filter bar
-              TagFilterBar(database: db, controller: widget.controller),
+              // Tag filter bar (recreated with new key to refresh)
+              TagFilterBar(key: _tagBarKey, database: db, controller: widget.controller),
               const SizedBox(height: 8),
 
               if (widget.controller.isLoading)
@@ -193,6 +202,7 @@ void _syncText() {
                           await _confirmDeleteItem(item.title),
                       onDismissed: (_) async {
                         await widget.controller.deleteItem(item.id);
+                        if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Item deleted')),
                         );
