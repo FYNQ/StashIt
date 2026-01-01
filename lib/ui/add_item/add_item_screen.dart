@@ -4,6 +4,7 @@ import '../../data/drift/database.dart';
 import 'add_item_controller.dart';
 import '../media/video_viewer_screen.dart';
 import '../media/image_viewer_screen.dart';
+import '../media/audio_player_screen.dart';
 import '../../util/share_out.dart';
 
 class AddItemScreen extends StatefulWidget {
@@ -124,6 +125,15 @@ class _AddItemScreenState extends State<AddItemScreen> {
            p.endsWith('.tiff');
   }
 
+  bool _isAudio(AttachmentFile a) {
+    final mt = (a.mimeType ?? '').toLowerCase();
+    if (mt.startsWith('audio/')) return true;
+    final p = a.path.toLowerCase();
+    return p.endsWith('.mp3') || p.endsWith('.m4a') || p.endsWith('.aac') ||
+           p.endsWith('.ogg') || p.endsWith('.opus') || p.endsWith('.wav') ||
+           p.endsWith('.flac');
+  }
+
   Widget _thumbFor(AttachmentFile a) {
     if (_isVideo(a)) {
       return Stack(
@@ -131,6 +141,15 @@ class _AddItemScreenState extends State<AddItemScreen> {
         children: const [
           ColoredBox(color: Color(0x11000000)),
           Center(child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 56)),
+        ],
+      );
+    }
+    if (_isAudio(a)) {
+      return Stack(
+        fit: StackFit.expand,
+        children: const [
+          ColoredBox(color: Color(0x11000000)),
+          Center(child: Icon(Icons.audiotrack, color: Colors.white70, size: 56)),
         ],
       );
     }
@@ -316,6 +335,13 @@ class _AddItemScreenState extends State<AddItemScreen> {
                               );
                             } else if (_isImage(a)) {
                               _openImageViewer(a);
+                            } else if (_isAudio(a)) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => AudioPlayerScreen(filePath: a.path),
+                                ),
+                              );
                             }
                           },
                           child: Hero(tag: a.path, child: child),
@@ -334,7 +360,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
                         ? null
                         : () async {
                             await controller.save();
-                            if (mounted) Navigator.pop(context, true); // <- return saved = true
+                            if (mounted) Navigator.pop(context, true);
                           },
                     child: controller.isSaving
                         ? const SizedBox(

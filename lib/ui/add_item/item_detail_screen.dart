@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../../data/drift/database.dart';
 import '../media/video_viewer_screen.dart';
 import '../media/image_viewer_screen.dart';
+import '../media/audio_player_screen.dart';
 import '../../util/share_out.dart';
-
 
 class ItemDetailScreen extends StatefulWidget {
   final Item item;
@@ -159,6 +159,25 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
            p.endsWith('.tiff');
   }
 
+  bool _isAudioPath(String path, [String? mime]) {
+    final mt = (mime ?? '').toLowerCase();
+    if (mt.startsWith('audio/')) return true;
+    final p = path.toLowerCase();
+    return p.endsWith('.mp3') || p.endsWith('.m4a') || p.endsWith('.aac') ||
+           p.endsWith('.ogg') || p.endsWith('.opus') || p.endsWith('.wav') ||
+           p.endsWith('.flac');
+  }
+
+  Widget _audioThumbBox() {
+    return Stack(
+      fit: StackFit.expand,
+      children: const [
+        ColoredBox(color: Color(0x11000000)),
+        Center(child: Icon(Icons.audiotrack, color: Colors.white70, size: 56)),
+      ],
+    );
+  }
+
   Widget _attachmentThumb(Attachment a) {
     if (_isVideoPath(a.path, a.mimeType)) {
       return Stack(
@@ -168,6 +187,9 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
           Center(child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 56)),
         ],
       );
+    }
+    if (_isAudioPath(a.path, a.mimeType)) {
+      return _audioThumbBox();
     }
     return Image.file(
       File(a.path),
@@ -210,15 +232,15 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             onPressed: _attachTagFlow,
             icon: const Icon(Icons.label_important_outline),
           ),
-		  IconButton(
-			tooltip: 'Share',
-			onPressed: () => shareItem(
-			  context: context,
-			  db: widget.database,
-			  item: widget.item,
-			),
-			icon: const Icon(Icons.share_outlined),
-		  ),
+          IconButton(
+            tooltip: 'Share',
+            onPressed: () => shareItem(
+              context: context,
+              db: widget.database,
+              item: widget.item,
+            ),
+            icon: const Icon(Icons.share_outlined),
+          ),
           IconButton(
             tooltip: 'Delete item',
             onPressed: _deleteThisItem,
@@ -320,6 +342,13 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                             );
                           } else if (_isImagePath(a.path, a.mimeType)) {
                             _openImageViewer(a, attachments);
+                          } else if (_isAudioPath(a.path, a.mimeType)) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => AudioPlayerScreen(filePath: a.path),
+                              ),
+                            );
                           }
                         },
                         child: Hero(tag: a.path, child: child),

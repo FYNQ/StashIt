@@ -76,6 +76,20 @@
 				<data android:mimeType="*/*"/>
 			</intent-filter>
 
+			<!-- Receive a single audio -->
+			<intent-filter>
+				<action android:name="android.intent.action.SEND" />
+				<category android:name="android.intent.category.DEFAULT" />
+				<data android:mimeType="audio/*" />
+			</intent-filter>
+
+			<!-- Receive multiple audio -->
+			<intent-filter>
+				<action android:name="android.intent.action.SEND_MULTIPLE" />
+				<category android:name="android.intent.category.DEFAULT" />
+				<data android:mimeType="audio/*" />
+			</intent-filter>
+
 
 		</activity>
 

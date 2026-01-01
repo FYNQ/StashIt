@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+import 'package:media_kit/media_kit.dart'; // REQUIRED for media_kit init
 import 'data/drift/database.dart';
 import 'ui/search/search_screen.dart';
 import 'ui/search/search_controller.dart';
@@ -14,6 +15,10 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize media_kit once before any Player is created 🎧
+  MediaKit.ensureInitialized();
+
   database = AppDatabase();
   // Ensure FTS table + triggers exist, and index is populated
   await database.ensureFtsSetup();
@@ -32,7 +37,6 @@ Future<void> main() async {
       final nav = navigatorKey.currentState;
       if (nav == null) return;
 
-      // Check if it's text (SharedMediaFile handles both files and text)
       // For plain text, the content is in .path
       final firstFile = initialMedia.first;
 
