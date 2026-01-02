@@ -24,24 +24,16 @@ class ItemDetailScreen extends StatefulWidget {
 
 class _ItemDetailScreenState extends State<ItemDetailScreen> {
   late Future<List<Attachment>> _futureAttachments;
-  late Future<List<Tag>> _futureTags;
 
   @override
   void initState() {
     super.initState();
     _futureAttachments = widget.database.getAttachmentsForItem(widget.item.id);
-    _futureTags = widget.database.getTagsForItem(widget.item.id);
-  }
-
-  Future<void> _reloadTags() async {
-    setState(() {
-      _futureTags = widget.database.getTagsForItem(widget.item.id);
-    });
   }
 
   Future<void> _detachTag(int tagId) async {
     await widget.database.detachTag(itemId: widget.item.id, tagId: tagId);
-    await _reloadTags();
+    // Stream will auto-update tags UI.
   }
 
   Future<void> _attachTagFlow() async {
@@ -74,7 +66,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                 onTap: () async {
                   Navigator.pop(ctx);
                   await widget.database.attachTag(itemId: widget.item.id, tagId: t.id);
-                  await _reloadTags();
+                  // Stream will auto-update tags UI.
                 },
               );
             },
@@ -114,7 +106,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
 
     final tag = await widget.database.upsertTagByName(name.trim());
     await widget.database.attachTag(itemId: widget.item.id, tagId: tag.id);
-    await _reloadTags();
+    // Stream will auto-update tags UI.
   }
 
   Future<void> _deleteThisItem() async {
@@ -334,9 +326,9 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                 Text("Updated At: ${item.updatedAt}"),
                 const SizedBox(height: 16),
 
-                // Tags section
-                FutureBuilder<List<Tag>>(
-                  future: _futureTags,
+                // Tags section (live)
+                StreamBuilder<List<Tag>>(
+                  stream: widget.database.watchTagsForItem(item.id),
                   builder: (context, snapT) {
                     final tags = snapT.data ?? const <Tag>[];
                     return Column(

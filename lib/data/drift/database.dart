@@ -300,6 +300,29 @@ class AppDatabase extends _$AppDatabase {
 
   Future<List<Tag>> getAllTags() => select(tags).get();
 
+  // NEW: live stream of all tags (auto-refresh UIs like Search tag bar & Add screen tags)
+  Stream<List<Tag>> watchAllTags() {
+    final q = select(tags)..orderBy([(t) => OrderingTerm.asc(t.name)]);
+    return q.watch();
+  }
+
+  // NEW: live stream of tags for an item (useful in ItemDetailScreen)
+  Stream<List<Tag>> watchTagsForItem(int itemId) {
+    return customSelect(
+      '''
+      SELECT tags.*
+      FROM tags
+      JOIN item_tags ON item_tags.tag_id = tags.id
+      WHERE item_tags.item_id = ?
+      ORDER BY tags.name
+      ''',
+      variables: [Variable.withInt(itemId)],
+      readsFrom: {tags, itemTags},
+    ).watch().asyncMap((rows) async {
+      return Future.wait(rows.map(tags.mapFromRow));
+    });
+  }
+
   Future<List<Tag>> getTagsForItem(int itemId) async {
     final result = await customSelect(
       '''

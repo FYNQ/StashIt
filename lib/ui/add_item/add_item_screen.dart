@@ -7,6 +7,7 @@ import '../media/image_viewer_screen.dart';
 import '../media/audio_player_screen.dart';
 import '../media/link_viewer_screen.dart';
 import '../../util/share_out.dart';
+import '../../share/share_source.dart';
 
 class AddItemScreen extends StatefulWidget {
   final AppDatabase database;
@@ -26,7 +27,6 @@ class AddItemScreen extends StatefulWidget {
 
 class _AddItemScreenState extends State<AddItemScreen> {
   late final AddItemController controller;
-  late Future<List<Tag>> _futureTags;
   bool _working = false;
 
   @override
@@ -36,26 +36,44 @@ class _AddItemScreenState extends State<AddItemScreen> {
       ..link = widget.sharedText
       ..attachments = List<AttachmentFile>.from(widget.attachments);
 
-    _futureTags = widget.database.getAllTags();
-
-    // Prefill from YouTube link (async)
+    // Prefill enhancements (YouTube, Source-App Tag)
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       setState(() => _working = true);
       try {
+        // 1) Prefill from YouTube link (title, thumbnail, tag)
         await controller.prefillFromLink();
-        setState(() {
-          _futureTags = widget.database.getAllTags();
-        });
+
+        // 2) Auto-tag from Android share sender app (label)
+        await _autoTagFromSender();
       } finally {
         if (mounted) setState(() => _working = false);
       }
     });
   }
 
-  Future<void> _reloadTags() async {
-    setState(() {
-      _futureTags = widget.database.getAllTags();
-    });
+  Future<void> _autoTagFromSender() async {
+    if (!Platform.isAndroid) return;
+
+    final info = await ShareSource.lastSenderInfo();
+    if (info == null) return;
+
+    // Prefer human-readable label; fallback to package name
+    final name = (info.label?.trim().isNotEmpty ?? false)
+        ? info.label!.trim()
+        : (info.package?.trim().isNotEmpty ?? false)
+            ? info.package!.trim()
+            : null;
+
+    if (name == null || name.isEmpty) return;
+
+    try {
+      final tag = await widget.database.upsertTagByName(name);
+      setState(() {
+        controller.tagIds.add(tag.id);
+      });
+    } catch (_) {
+      // ignore
+    }
   }
 
   Future<void> _createTagInline() async {
@@ -93,8 +111,10 @@ class _AddItemScreenState extends State<AddItemScreen> {
     setState(() => _working = true);
     try {
       final tag = await widget.database.upsertTagByName(name);
-      controller.tagIds.add(tag.id); // auto-select the new tag
-      await _reloadTags();
+      setState(() {
+        controller.tagIds.add(tag.id); // auto-select the new tag
+      });
+      // Stream will auto-update the list.
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -275,8 +295,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
                 ),
                 const SizedBox(height: 8),
 
-                FutureBuilder<List<Tag>>(
-                  future: _futureTags,
+                // Live tags list
+                StreamBuilder<List<Tag>>(
+                  stream: widget.database.watchAllTags(),
                   builder: (context, snap) {
                     final tags = snap.data ?? const <Tag>[];
                     if (snap.connectionState == ConnectionState.waiting && tags.isEmpty) {
