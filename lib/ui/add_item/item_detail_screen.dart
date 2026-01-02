@@ -4,6 +4,8 @@ import '../../data/drift/database.dart';
 import '../media/video_viewer_screen.dart';
 import '../media/image_viewer_screen.dart';
 import '../media/audio_player_screen.dart';
+import '../media/link_viewer_screen.dart';
+import '../media/text_viewer_screen.dart';
 import '../../util/share_out.dart';
 
 class ItemDetailScreen extends StatefulWidget {
@@ -219,6 +221,26 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   }
   // --- end helpers ---
 
+  void _openTextViewer(String text) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TextViewerScreen(
+          text: text,
+        ),
+      ),
+    );
+  }
+
+  void _openLinkViewer(String url) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LinkViewerScreen(url: url),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
@@ -260,9 +282,52 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
               children: [
                 Text("Title: ${item.title}", style: const TextStyle(fontSize: 24)),
                 const SizedBox(height: 8),
-                Text("Content: ${item.content ?? 'No content available'}"),
+
+                // Content viewer
+                if ((item.content ?? '').trim().isEmpty)
+                  const Text("Content: No content available")
+                else
+                  InkWell(
+                    onTap: () => _openTextViewer(item.content!.trim()),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Content:", style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 4),
+                        Text(
+                          item.content!,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(decoration: TextDecoration.underline),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 const SizedBox(height: 8),
-                Text("Link: ${item.link ?? 'No link available'}"),
+
+                // Link viewer
+                if ((item.link ?? '').trim().isEmpty)
+                  const Text("Link: No link available")
+                else
+                  InkWell(
+                    onTap: () => _openLinkViewer(item.link!.trim()),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Link: ", style: TextStyle(fontWeight: FontWeight.w600)),
+                        Expanded(
+                          child: Text(
+                            item.link!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(decoration: TextDecoration.underline),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 const SizedBox(height: 8),
                 Text("Created At: ${item.createdAt}"),
                 const SizedBox(height: 8),

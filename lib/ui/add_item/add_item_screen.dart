@@ -5,6 +5,7 @@ import 'add_item_controller.dart';
 import '../media/video_viewer_screen.dart';
 import '../media/image_viewer_screen.dart';
 import '../media/audio_player_screen.dart';
+import '../media/link_viewer_screen.dart';
 import '../../util/share_out.dart';
 
 class AddItemScreen extends StatefulWidget {
@@ -223,11 +224,23 @@ class _AddItemScreenState extends State<AddItemScreen> {
                 if (hasLink) ...[
                   TextField(
                     enabled: false,
-                    controller: TextEditingController(
-                      text: controller.link ?? '',
-                    ),
-                    decoration: const InputDecoration(
+                    controller: TextEditingController(text: controller.link ?? ''),
+                    decoration: InputDecoration(
                       labelText: 'Link',
+                      suffixIcon: IconButton(
+                        tooltip: 'Open',
+                        icon: const Icon(Icons.open_in_new),
+                        onPressed: () {
+                          final url = (controller.link ?? '').trim();
+                          if (url.isEmpty) return;
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => LinkViewerScreen(url: url),
+                            ),
+                          );
+                        },
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
