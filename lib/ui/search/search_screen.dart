@@ -4,6 +4,7 @@ import '../../data/drift/database.dart';
 import '../add_item/item_detail_screen.dart';
 import 'tag_filter_bar.dart';
 import '../tags/tag_manager_screen.dart';
+import '../menu/app_drawer.dart';
 
 class SearchScreen extends StatefulWidget {
   final ItemSearchController controller;
@@ -19,8 +20,9 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   late final TextEditingController _textController;
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // NEW: Key to force TagFilterBar to rebuild (and refetch tags)
+  // Key to force TagFilterBar to rebuild (and refetch tags)
   Key _tagBarKey = UniqueKey();
 
   @override
@@ -40,7 +42,6 @@ class _SearchScreenState extends State<SearchScreen> {
   void _syncText() {
     final query = widget.controller.query;
     if (_textController.text != query) {
-      // Keep cursor at the end after syncing
       _textController.value = TextEditingValue(
         text: query,
         selection: TextSelection.collapsed(offset: query.length),
@@ -127,8 +128,30 @@ class _SearchScreenState extends State<SearchScreen> {
         final hasTagFilter = widget.controller.tagId != null;
 
         return Scaffold(
+          key: _scaffoldKey,
+          drawer: const AppDrawer(),
           appBar: AppBar(
-            title: const Text('Search'),
+            leadingWidth: 56,
+            leading: Builder(
+  builder: (ctx) {
+    final isDark = Theme.of(ctx).brightness == Brightness.dark;
+    final asset = isDark ? 'assets/logo_appbar_light.png' : 'assets/logo_appbar_dark.png';
+    return InkWell(
+      onTap: () => Scaffold.of(ctx).openDrawer(),
+      borderRadius: BorderRadius.circular(28),
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Image.asset(
+          asset,
+          width: 32,
+          height: 32,
+          fit: BoxFit.contain,
+        ),
+      ),
+    );
+  },
+            ),
+            title: null, // No "Search" text in AppBar
             actions: [
               if (hasTagFilter)
                 IconButton(
@@ -145,7 +168,6 @@ class _SearchScreenState extends State<SearchScreen> {
                       builder: (_) => TagManagerScreen(database: db),
                     ),
                   );
-                  // Force TagFilterBar to rebuild and refetch tags
                   if (!mounted) return;
                   setState(() {
                     _tagBarKey = UniqueKey();
@@ -165,6 +187,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   decoration: const InputDecoration(
                     hintText: 'Search…',
                     border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.search),
                   ),
                 ),
               ),
