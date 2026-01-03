@@ -1,10 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../data/drift/database.dart';
 import '../media/video_viewer_screen.dart';
 import '../media/image_viewer_screen.dart';
 import '../media/audio_player_screen.dart';
-import '../media/link_viewer_screen.dart';
 import '../media/text_viewer_screen.dart';
 import '../../util/share_out.dart';
 
@@ -25,15 +25,30 @@ class ItemDetailScreen extends StatefulWidget {
 class _ItemDetailScreenState extends State<ItemDetailScreen> {
   late Future<List<Attachment>> _futureAttachments;
 
+  // Toggle: Created At / Updated At (hidden by default)
+  bool _metaOpen = false;
+
+  // Notes editor state
+  late Item _item;
+  bool _editingNotes = false;
+  late TextEditingController _notesCtrl;
+
   @override
   void initState() {
     super.initState();
+    _item = widget.item;
+    _notesCtrl = TextEditingController(text: _item.content ?? '');
     _futureAttachments = widget.database.getAttachmentsForItem(widget.item.id);
+  }
+
+  @override
+  void dispose() {
+    _notesCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _detachTag(int tagId) async {
     await widget.database.detachTag(itemId: widget.item.id, tagId: tagId);
-    // Stream will auto-update tags UI.
   }
 
   Future<void> _attachTagFlow() async {
@@ -66,7 +81,6 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                 onTap: () async {
                   Navigator.pop(ctx);
                   await widget.database.attachTag(itemId: widget.item.id, tagId: t.id);
-                  // Stream will auto-update tags UI.
                 },
               );
             },
@@ -106,7 +120,6 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
 
     final tag = await widget.database.upsertTagByName(name.trim());
     await widget.database.attachTag(itemId: widget.item.id, tagId: tag.id);
-    // Stream will auto-update tags UI.
   }
 
   Future<void> _deleteThisItem() async {
@@ -132,6 +145,29 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     if (!ok) return;
     await widget.database.deleteItemById(widget.item.id);
     if (mounted) Navigator.pop(context); // back to list
+  }
+
+  // --- Link helper (open externally) ---
+  Future<void> _openExternalUrl(String raw) async {
+    var u = raw.trim();
+    if (u.isEmpty) return;
+    if (!u.contains('://')) {
+      u = 'https://$u';
+    }
+    final uri = Uri.tryParse(u);
+    if (uri == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid URL')),
+      );
+      return;
+    }
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open: $u')),
+      );
+    }
   }
 
   // --- Media helpers ---
@@ -224,22 +260,31 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     );
   }
 
-  void _openLinkViewer(String url) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => LinkViewerScreen(url: url),
-      ),
-    );
+  Future<void> _saveNotes() async {
+    final newText = _notesCtrl.text.trim();
+    // Ensure your AppDatabase has updateItemContent method.
+    await widget.database.updateItemContent(id: _item.id, content: newText.isEmpty ? null : newText);
+    setState(() {
+      _item = Item(
+        id: _item.id,
+        title: _item.title,
+        content: newText.isEmpty ? null : newText,
+        link: _item.link,
+        createdAt: _item.createdAt,
+        updatedAt: DateTime.now(),
+      );
+      _editingNotes = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final item = widget.item;
+    final hasContent = (_item.content ?? '').trim().isNotEmpty;
+    final hasLink = (_item.link ?? '').trim().isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(item.title),
+        title: Text(_item.title),
         actions: [
           IconButton(
             tooltip: 'Attach tag',
@@ -251,7 +296,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             onPressed: () => shareItem(
               context: context,
               db: widget.database,
-              item: widget.item,
+              item: _item,
             ),
             icon: const Icon(Icons.share_outlined),
           ),
@@ -272,63 +317,121 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("Title: ${item.title}", style: const TextStyle(fontSize: 24)),
-                const SizedBox(height: 8),
-
-                // Content viewer
-                if ((item.content ?? '').trim().isEmpty)
-                  const Text("Content: No content available")
-                else
-                  InkWell(
-                    onTap: () => _openTextViewer(item.content!.trim()),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                // Notes (Content) section
+                if (_editingNotes) ...[
+                  const Text("Notes", style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  TextField(
+                    controller: _notesCtrl,
+                    minLines: 3,
+                    maxLines: 10,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Write your notes…',
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.check),
+                        label: const Text('Save'),
+                        onPressed: _saveNotes,
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        icon: const Icon(Icons.close),
+                        label: const Text('Cancel'),
+                        onPressed: () => setState(() {
+                          _notesCtrl.text = _item.content ?? '';
+                          _editingNotes = false;
+                        }),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                ] else ...[
+                  if (hasContent) ...[
+                    Row(
                       children: [
-                        const Text("Content:", style: TextStyle(fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 4),
-                        Text(
-                          item.content!,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(decoration: TextDecoration.underline),
+                        const Text("Notes:", style: TextStyle(fontWeight: FontWeight.w600)),
+                        const Spacer(),
+                        IconButton(
+                          tooltip: 'Edit notes',
+                          icon: const Icon(Icons.edit_note),
+                          onPressed: () => setState(() => _editingNotes = true),
                         ),
                       ],
                     ),
-                  ),
+                    InkWell(
+                      onTap: () => _openTextViewer(_item.content!.trim()),
+                      child: Text(
+                        _item.content!,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(decoration: TextDecoration.underline),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ] else ...[
+                    OutlinedButton.icon(
+                      onPressed: () => setState(() => _editingNotes = true),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add notes'),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ],
 
-                const SizedBox(height: 8),
-
-                // Link viewer
-                if ((item.link ?? '').trim().isEmpty)
-                  const Text("Link: No link available")
-                else
-                  InkWell(
-                    onTap: () => _openLinkViewer(item.link!.trim()),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text("Link: ", style: TextStyle(fontWeight: FontWeight.w600)),
-                        Expanded(
+                // Link (open externally) + info toggle (only if link exists)
+                if (hasLink)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text("Link: ", style: TextStyle(fontWeight: FontWeight.w600)),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => _openExternalUrl(_item.link!.trim()),
                           child: Text(
-                            item.link!,
+                            _item.link!,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(decoration: TextDecoration.underline),
                           ),
                         ),
+                      ),
+                      IconButton(
+                        tooltip: _metaOpen ? 'Hide details' : 'Show details',
+                        icon: Icon(_metaOpen ? Icons.info : Icons.info_outline),
+                        onPressed: () => setState(() => _metaOpen = !_metaOpen),
+                      ),
+                    ],
+                  ),
+
+                // Metadata (toggle visible)
+                AnimatedCrossFade(
+                  firstChild: const SizedBox.shrink(),
+                  secondChild: Padding(
+                    padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("Created At: ${_item.createdAt}"),
+                        const SizedBox(height: 8),
+                        Text("Updated At: ${_item.updatedAt}"),
                       ],
                     ),
                   ),
+                  crossFadeState: _metaOpen ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                  duration: const Duration(milliseconds: 200),
+                ),
 
-                const SizedBox(height: 8),
-                Text("Created At: ${item.createdAt}"),
-                const SizedBox(height: 8),
-                Text("Updated At: ${item.updatedAt}"),
                 const SizedBox(height: 16),
 
                 // Tags section (live)
                 StreamBuilder<List<Tag>>(
-                  stream: widget.database.watchTagsForItem(item.id),
+                  stream: widget.database.watchTagsForItem(_item.id),
                   builder: (context, snapT) {
                     final tags = snapT.data ?? const <Tag>[];
                     return Column(

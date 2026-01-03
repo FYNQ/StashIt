@@ -76,6 +76,19 @@ class AppDatabase extends _$AppDatabase {
     return parts.join(' AND ');
   }
 
+  // --- UPDATE: item content (notes) ---
+  Future<void> updateItemContent({
+    required int id,
+    String? content,
+  }) async {
+    await (update(items)..where((t) => t.id.equals(id))).write(
+      ItemsCompanion(
+        content: Value(content),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
   // --------------------------------------------------
   // FTS ENSURE + REBUILD
   // --------------------------------------------------

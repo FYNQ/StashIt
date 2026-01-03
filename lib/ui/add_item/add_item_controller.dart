@@ -8,6 +8,7 @@ class AddItemController extends ChangeNotifier {
 
   String? link; // optional shared text/link
   String title = '';
+  String notes = ''; // NEW: notes -> stored in Item.content
   bool isSaving = false;
 
   // Incoming attachments (e.g., screenshots)
@@ -58,20 +59,22 @@ class AddItemController extends ChangeNotifier {
     final rawLink = (link ?? '').trim();
     final hasLink = rawLink.isNotEmpty;
     final hasAttachments = attachments.isNotEmpty;
-    if (!hasLink && !hasAttachments && title.trim().isEmpty) return;
+    final hasNotes = notes.trim().isNotEmpty;
+
+    if (!hasLink && !hasAttachments && title.trim().isEmpty && !hasNotes) return;
 
     isSaving = true;
     notifyListeners();
 
     try {
-      // If no title and only attachments, default to 'Screenshot'
+      // If no title and only attachments/notes/link, default to 'Screenshot' when no link.
       final effectiveTitle = title.isNotEmpty
           ? title
           : (hasLink ? null : 'Screenshot');
 
-      // Save item: store URL into the link column (and no content for YouTube)
+      // Save item: notes go into content; link into link column
       final itemId = await db.insertSharedData(
-        text: null,
+        text: hasNotes ? notes.trim() : null,
         title: effectiveTitle,
         link: hasLink ? rawLink : null,
       );

@@ -1,11 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../data/drift/database.dart';
 import 'add_item_controller.dart';
 import '../media/video_viewer_screen.dart';
 import '../media/image_viewer_screen.dart';
 import '../media/audio_player_screen.dart';
-import '../media/link_viewer_screen.dart';
 import '../../util/share_out.dart';
 import '../../share/share_source.dart';
 
@@ -36,14 +36,11 @@ class _AddItemScreenState extends State<AddItemScreen> {
       ..link = widget.sharedText
       ..attachments = List<AttachmentFile>.from(widget.attachments);
 
-    // Prefill enhancements (YouTube, Source-App Tag)
+    // Prefill (YouTube) + auto-tag from sender app
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       setState(() => _working = true);
       try {
-        // 1) Prefill from YouTube link (title, thumbnail, tag)
         await controller.prefillFromLink();
-
-        // 2) Auto-tag from Android share sender app (label)
         await _autoTagFromSender();
       } finally {
         if (mounted) setState(() => _working = false);
@@ -52,12 +49,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
   }
 
   Future<void> _autoTagFromSender() async {
-    if (!Platform.isAndroid) return;
-
     final info = await ShareSource.lastSenderInfo();
     if (info == null) return;
 
-    // Prefer human-readable label; fallback to package name
     final name = (info.label?.trim().isNotEmpty ?? false)
         ? info.label!.trim()
         : (info.package?.trim().isNotEmpty ?? false)
@@ -76,6 +70,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
     }
   }
 
+  // NEW: Inline create tag
   Future<void> _createTagInline() async {
     final textCtrl = TextEditingController();
 
@@ -106,15 +101,15 @@ class _AddItemScreenState extends State<AddItemScreen> {
       },
     );
 
-    if (name == null || name.isEmpty) return;
+    if (name == null || name.trim().isEmpty) return;
 
     setState(() => _working = true);
     try {
-      final tag = await widget.database.upsertTagByName(name);
+      final tag = await widget.database.upsertTagByName(name.trim());
       setState(() {
         controller.tagIds.add(tag.id); // auto-select the new tag
       });
-      // Stream will auto-update the list.
+      // No manual reload needed: Tag list is streamed (watchAllTags)
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -122,6 +117,29 @@ class _AddItemScreenState extends State<AddItemScreen> {
       );
     } finally {
       if (mounted) setState(() => _working = false);
+    }
+  }
+
+  // Link -> open externally
+  Future<void> _openExternalUrl(String raw) async {
+    var u = raw.trim();
+    if (u.isEmpty) return;
+    if (!u.contains('://')) {
+      u = 'https://$u';
+    }
+    final uri = Uri.tryParse(u);
+    if (uri == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid URL')),
+      );
+      return;
+    }
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open: $u')),
+      );
     }
   }
 
@@ -224,6 +242,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
                   if ((controller.link ?? '').trim().isNotEmpty) {
                     textParts.add(controller.link!.trim());
                   }
+                  if (controller.notes.trim().isNotEmpty) {
+                    textParts.add(controller.notes.trim());
+                  }
                   final text = textParts.join('\n\n');
                   shareAttachments(
                     context: context,
@@ -253,12 +274,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
                         onPressed: () {
                           final url = (controller.link ?? '').trim();
                           if (url.isEmpty) return;
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => LinkViewerScreen(url: url),
-                            ),
-                          );
+                          _openExternalUrl(url);
                         },
                       ),
                     ),
@@ -271,6 +287,20 @@ class _AddItemScreenState extends State<AddItemScreen> {
                     labelText: 'Title',
                   ),
                   onChanged: (v) => controller.title = v,
+                ),
+
+                const SizedBox(height: 12),
+
+                // Notes (optional)
+                TextField(
+                  decoration: const InputDecoration(
+                    labelText: 'Notes (optional)',
+                    alignLabelWithHint: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  minLines: 3,
+                  maxLines: 6,
+                  onChanged: (v) => controller.notes = v,
                 ),
 
                 const SizedBox(height: 12),

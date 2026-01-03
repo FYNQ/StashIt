@@ -113,13 +113,19 @@ flutter:
 
 flutter_launcher_icons:
   android: true
-  ios: false
-  adaptive_icon_foreground: assets/icons/foreground.png
-  adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_monochrome: assets/icons/monochrome.png
-  image_path_android: assets/icons/foreground.png
-  image_path_ios: assets/icons/foreground.png
-  remove_alpha_ios: true
+  ios: false  # set to true later if you add iOS assets
+
+  # Legacy fallback (pre‑Oreo)
+  image_path: assets/icon_legacy.png
+
+  # Adaptive (Oreo+)
+  adaptive_icon_foreground: assets/icon_foreground.png
+  adaptive_icon_background: assets/icon_background.png
+
+  # Android 13 “Themed icons”
+  adaptive_icon_monochrome: assets/icon_monochrome.png
+
+  min_sdk_android: 21
 
 flutter_native_splash:
   # Common background
