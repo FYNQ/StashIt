@@ -33,12 +33,44 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   bool _editingNotes = false;
   late TextEditingController _notesCtrl;
 
+  // Auto-delete state
+  Schedule? _autoDelete;
+  bool _loadingAutoDelete = true;
+
   @override
   void initState() {
     super.initState();
     _item = widget.item;
     _notesCtrl = TextEditingController(text: _item.content ?? '');
     _futureAttachments = widget.database.getAttachmentsForItem(widget.item.id);
+    _loadAutoDelete();
+  }
+
+  Future<void> _loadAutoDelete() async {
+    final s = await widget.database.getAutoDeleteScheduleForItem(widget.item.id);
+    if (!mounted) return;
+    setState(() {
+      _autoDelete = s;
+      _loadingAutoDelete = false;
+    });
+  }
+
+  Future<void> _setAutoDelete(Duration d) async {
+    setState(() => _loadingAutoDelete = true);
+    await widget.database.setAutoDeleteSchedule(itemId: widget.item.id, after: d);
+    await _loadAutoDelete();
+  }
+
+  Future<void> _clearAutoDelete() async {
+    setState(() => _loadingAutoDelete = true);
+    await widget.database.clearAutoDeleteSchedule(widget.item.id);
+    await _loadAutoDelete();
+  }
+
+  String _formatNextFire(int? ms) {
+    if (ms == null) return '';
+    final dt = DateTime.fromMillisecondsSinceEpoch(ms);
+    return dt.toLocal().toString();
   }
 
   @override
@@ -427,6 +459,55 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                   duration: const Duration(milliseconds: 200),
                 ),
 
+                const SizedBox(height: 16),
+
+                // --- Auto-delete section ---
+                Row(
+                  children: [
+                    const Text('Auto-delete', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Spacer(),
+                    if (_loadingAutoDelete)
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    if (!_loadingAutoDelete)
+                      PopupMenuButton<String>(
+                        tooltip: 'Set timer',
+                        icon: const Icon(Icons.timer_outlined),
+                        onSelected: (v) {
+                          switch (v) {
+                            case 'off':
+                              _clearAutoDelete();
+                              break;
+                            case '1d':
+                              _setAutoDelete(const Duration(days: 1));
+                              break;
+                            case '1w':
+                              _setAutoDelete(const Duration(days: 7));
+                              break;
+                            case '1m':
+                              _setAutoDelete(const Duration(days: 30));
+                              break;
+                          }
+                        },
+                        itemBuilder: (ctx) => const [
+                          PopupMenuItem(value: 'off', child: Text('Off')),
+                          PopupMenuItem(value: '1d', child: Text('In 1 day')),
+                          PopupMenuItem(value: '1w', child: Text('In 1 week')),
+                          PopupMenuItem(value: '1m', child: Text('In 1 month')),
+                        ],
+                      ),
+                  ],
+                ),
+                if (!_loadingAutoDelete && _autoDelete != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Scheduled for: ${_formatNextFire(_autoDelete?.nextFire)}',
+                    style: const TextStyle(color: Colors.black54),
+                  ),
+                ],
                 const SizedBox(height: 16),
 
                 // Tags section (live)

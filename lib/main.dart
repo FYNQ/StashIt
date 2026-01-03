@@ -6,6 +6,7 @@ import 'ui/search/search_screen.dart';
 import 'ui/search/search_controller.dart';
 import 'ui/add_item/add_item_screen.dart';
 import 'share/share_intent_handler.dart';
+import 'util/auto_delete_service.dart'; // <-- ADD THIS
 
 late final AppDatabase database;
 late final ItemSearchController searchController;
@@ -22,6 +23,10 @@ Future<void> main() async {
   database = AppDatabase();
   // Ensure FTS table + triggers exist, and index is populated
   await database.ensureFtsSetup();
+
+  // Start auto-delete pruning service
+  await AutoDeleteService.start(database); // <-- ADD THIS
+
   searchController = ItemSearchController(database);
 
   await ShareIntentHandler.init();

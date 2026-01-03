@@ -408,11 +408,96 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // --------------------------------------------------
+  // AUTO-DELETE SCHEDULES (per item)
+  // --------------------------------------------------
+
+  int _nowMs() => DateTime.now().millisecondsSinceEpoch;
+
+  /// Get current auto-delete schedule for an item (if any).
+  Future<Schedule?> getAutoDeleteScheduleForItem(int itemId) async {
+    return (select(schedules)
+          ..where((s) =>
+              s.itemId.equals(itemId.toString()) &
+              s.type.equals('auto_delete')))
+        .getSingleOrNull();
+  }
+
+  /// Set (or replace) an auto-delete schedule for an item after [after].
+  Future<void> setAutoDeleteSchedule({
+    required int itemId,
+    required Duration after,
+  }) async {
+    final next = _nowMs() + after.inMilliseconds;
+
+    // Remove previous schedule if exists
+    await (delete(schedules)
+          ..where((s) =>
+              s.itemId.equals(itemId.toString()) &
+              s.type.equals('auto_delete')))
+        .go();
+
+    // Insert a new schedule
+    final id = 'del_${itemId}_${DateTime.now().microsecondsSinceEpoch}';
+    await into(schedules).insert(
+      SchedulesCompanion.insert(
+        id: id,
+        itemId: itemId.toString(),
+        type: 'auto_delete',
+        nextFire: const Value.absent(), // set via update right below or inline
+        createdAt: _nowMs(),
+      ),
+    );
+
+    // Set nextFire via update to avoid nullable constraints confusion
+    await (update(schedules)..where((s) => s.id.equals(id))).write(
+      SchedulesCompanion(nextFire: Value(next)),
+    );
+  }
+
+  /// Clear the auto-delete schedule for an item.
+  Future<void> clearAutoDeleteSchedule(int itemId) async {
+    await (delete(schedules)
+          ..where((s) =>
+              s.itemId.equals(itemId.toString()) &
+              s.type.equals('auto_delete')))
+        .go();
+  }
+
+  /// Delete items with due auto-delete schedules (now or past).
+  Future<int> pruneDueAutoDeletes() async {
+    final now = _nowMs();
+    final due = await (select(schedules)
+          ..where((s) =>
+              s.type.equals('auto_delete') &
+              s.nextFire.isNotNull() &
+              s.nextFire.isSmallerOrEqualValue(now)))
+        .get();
+
+    if (due.isEmpty) return 0;
+
+    await transaction(() async {
+      for (final sch in due) {
+        final itemId = int.tryParse(sch.itemId);
+        if (itemId != null) {
+          await deleteItemById(itemId);
+        }
+        // Remove this schedule regardless
+        await (delete(schedules)..where((s) => s.id.equals(sch.id))).go();
+      }
+    });
+
+    return due.length;
+  }
+
+  // --------------------------------------------------
   // DELETE
   // --------------------------------------------------
 
   Future<void> deleteItemById(int id) async {
     await transaction(() async {
+      // Clean schedules for this item (avoid orphan schedules)
+      await (delete(schedules)..where((s) => s.itemId.equals(id.toString()))).go();
+
       await (delete(itemTags)..where((t) => t.itemId.equals(id))).go();
       await (delete(attachments)..where((t) => t.itemId.equals(id))).go();
       await (delete(items)..where((t) => t.id.equals(id))).go();
@@ -425,6 +510,10 @@ class AppDatabase extends _$AppDatabase {
     if (idList.isEmpty) return;
 
     await transaction(() async {
+      // Clean schedules for these items
+      final sidList = idList.map((e) => e.toString()).toList();
+      await (delete(schedules)..where((s) => s.itemId.isIn(sidList))).go();
+
       await (delete(itemTags)..where((t) => t.itemId.isIn(idList))).go();
       await (delete(attachments)..where((t) => t.itemId.isIn(idList))).go();
       await (delete(items)..where((t) => t.id.isIn(idList))).go();
