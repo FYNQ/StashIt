@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Markus Kreidl
+
 import 'package:flutter/material.dart';
 import '../pages/info_screen.dart';
 import '../pages/coffee_screen.dart';
@@ -36,7 +39,7 @@ class AppDrawer extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   const Text(
-                    'StashIt',
+                    'Stashr',
                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
                   ),
                 ],

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Markus Kreidl
+
 import 'package:flutter/material.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:media_kit/media_kit.dart'; // REQUIRED for media_kit init
@@ -129,7 +132,7 @@ class StashItApp extends StatelessWidget {
     return MaterialApp(
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
-      title: 'StashIt',
+      title: 'Stashr',
       theme: ThemeData(useMaterial3: true),
       home: SearchScreen(
         controller: searchController,

@@ -1,4 +1,4 @@
-package com.fynq.stashit
+package com.fynq.stashr
 
 import android.content.Intent
 import android.net.Uri
@@ -75,7 +75,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            "stashit/share_meta",
+            "stashr/share_meta",
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "getLastSenderInfo" -> {

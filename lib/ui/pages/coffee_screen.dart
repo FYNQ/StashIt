@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Markus Kreidl
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -33,7 +36,7 @@ class CoffeeScreen extends StatelessWidget {
         child: Column(
           children: [
             const Text(
-              'If you enjoy StashIt, consider supporting development with a coffee!',
+              'If you enjoy Stashr, consider supporting development with a coffee!',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),

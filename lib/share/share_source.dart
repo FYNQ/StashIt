@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Markus Kreidl
+
 import 'dart:io';
 import 'package:flutter/services.dart';
 
@@ -8,7 +11,7 @@ class ShareSenderInfo {
 }
 
 class ShareSource {
-  static const MethodChannel _ch = MethodChannel('stashit/share_meta');
+  static const MethodChannel _ch = MethodChannel('stashr/share_meta');
 
   static Future<ShareSenderInfo?> lastSenderInfo() async {
     if (!Platform.isAndroid) return null;

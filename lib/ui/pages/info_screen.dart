@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Markus Kreidl
+
 import 'package:flutter/material.dart';
 
 class InfoScreen extends StatelessWidget {
@@ -12,10 +15,10 @@ class InfoScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: ListView(
           children: [
-            Text('About StashIt', style: text.titleLarge),
+            Text('About Stashr', style: text.titleLarge),
             const SizedBox(height: 8),
             const Text(
-              'StashIt helps you stash links, notes, and media quickly. '
+              'Stashr helps you stash links, notes, and media quickly. '
               'Share into the app from any source, auto-tag by app, and find items fast with search & tags.',
             ),
             const SizedBox(height: 16),

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Markus Kreidl
+
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;

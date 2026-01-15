@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Markus Kreidl
+
 import 'package:flutter/material.dart';
 import '../../data/drift/database.dart';
 

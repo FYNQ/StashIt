@@ -1,8 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Markus Kreidl
+
 import 'dart:async';
 import 'package:flutter/services.dart';
 
 class ShareIntentHandler {
-  static const _channel = EventChannel('stashit/share');
+  static const _channel = EventChannel('stashr/share');
   static final _controller = StreamController<String>.broadcast();
 
   static Stream<String> get stream => _controller.stream;

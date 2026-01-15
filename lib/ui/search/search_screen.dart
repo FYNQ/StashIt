@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Markus Kreidl
+
 import 'package:flutter/material.dart';
 import 'search_controller.dart';
 import '../../data/drift/database.dart';
@@ -135,7 +138,7 @@ class _SearchScreenState extends State<SearchScreen> {
             leading: Builder(
   builder: (ctx) {
     final isDark = Theme.of(ctx).brightness == Brightness.dark;
-    final asset = isDark ? 'assets/logo_appbar_light.png' : 'assets/logo_appbar_dark.png';
+    final asset = isDark ? 'assets/icon_v2.png' : 'assets/icon_v2.png';
     return InkWell(
       onTap: () => Scaffold.of(ctx).openDrawer(),
       borderRadius: BorderRadius.circular(28),
