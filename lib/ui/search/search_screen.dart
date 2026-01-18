@@ -1,5 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 Markus Kreidl
+// SPDX-License-Identifier: Apache-2.0 © 2026 Markus Kreidl
 
 import 'package:flutter/material.dart';
 import 'search_controller.dart';
@@ -132,27 +131,27 @@ class _SearchScreenState extends State<SearchScreen> {
 
         return Scaffold(
           key: _scaffoldKey,
-          drawer: const AppDrawer(),
+          drawer: AppDrawer(db: db),
           appBar: AppBar(
             leadingWidth: 56,
             leading: Builder(
-  builder: (ctx) {
-    final isDark = Theme.of(ctx).brightness == Brightness.dark;
-    final asset = isDark ? 'assets/icon_v2.png' : 'assets/icon_v2.png';
-    return InkWell(
-      onTap: () => Scaffold.of(ctx).openDrawer(),
-      borderRadius: BorderRadius.circular(28),
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Image.asset(
-          asset,
-          width: 32,
-          height: 32,
-          fit: BoxFit.contain,
-        ),
-      ),
-    );
-  },
+              builder: (ctx) {
+                final isDark = Theme.of(ctx).brightness == Brightness.dark;
+                final asset = isDark ? 'assets/icon_v2.png' : 'assets/icon_v2.png';
+                return InkWell(
+                  onTap: () => Scaffold.of(ctx).openDrawer(),
+                  borderRadius: BorderRadius.circular(28),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Image.asset(
+                      asset,
+                      width: 32,
+                      height: 32,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                );
+              },
             ),
             title: null, // No "Search" text in AppBar
             actions: [

@@ -96,24 +96,18 @@ class AppDatabase extends _$AppDatabase {
   // FTS ENSURE + REBUILD
   // --------------------------------------------------
 
-  // Ensure FTS virtual table + triggers exist, and backfill index if empty
   Future<void> ensureFtsSetup() async {
-    // 1) Ensure VIRTUAL TABLE exists
     await customStatement('''
       CREATE VIRTUAL TABLE IF NOT EXISTS items_fts
       USING fts5(title, content);
     ''');
 
-    // 2) Ensure triggers exist (wrap to ignore "already exists" errors)
     Future<void> _try(String sql) async {
       try {
         await customStatement(sql);
-      } catch (_) {
-        // ignore
-      }
+      } catch (_) {}
     }
 
-    // Insert (content + link)
     await _try('''
       CREATE TRIGGER IF NOT EXISTS items_ai AFTER INSERT ON items
       BEGIN
@@ -126,7 +120,6 @@ class AppDatabase extends _$AppDatabase {
       END;
     ''');
 
-    // Update (content + link)
     await _try('''
       CREATE TRIGGER IF NOT EXISTS items_au AFTER UPDATE ON items
       BEGIN
@@ -140,7 +133,6 @@ class AppDatabase extends _$AppDatabase {
       END;
     ''');
 
-    // Delete
     await _try('''
       CREATE TRIGGER IF NOT EXISTS items_ad AFTER DELETE ON items
       BEGIN
@@ -148,7 +140,6 @@ class AppDatabase extends _$AppDatabase {
       END;
     ''');
 
-    // 3) Backfill if empty
     final row = await customSelect('SELECT COUNT(*) AS c FROM items_fts').getSingleOrNull();
     final ftsCount = (row?.data['c'] as int?) ?? 0;
     if (ftsCount == 0) {
@@ -168,23 +159,19 @@ class AppDatabase extends _$AppDatabase {
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) async {
-          // 1) Create all “normal” tables
           await m.createAll();
 
-          // 2) Create the FTS5 virtual table (NOT a drift table)
           await customStatement('''
             CREATE VIRTUAL TABLE items_fts
             USING fts5(title, content);
           ''');
 
-          // 3) Seed FTS from existing items (include ALL; index content + link)
           await customStatement('''
             INSERT INTO items_fts(rowid, title, content)
             SELECT id, title, trim(coalesce(content, '') || ' ' || coalesce(link, ''))
             FROM items;
           ''');
 
-          // 4) Keep FTS in sync via triggers (content + link)
           await customStatement('''
             CREATE TRIGGER items_ai AFTER INSERT ON items
             BEGIN
@@ -223,13 +210,11 @@ class AppDatabase extends _$AppDatabase {
   // BULK DELETE HELPERS
   // --------------------------------------------------
 
-  // Get all item IDs for a given tag
   Future<List<int>> getItemIdsByTag(int tagId) async {
     final rows = await (select(itemTags)..where((t) => t.tagId.equals(tagId))).get();
     return rows.map((r) => r.itemId).toSet().toList();
   }
 
-  // Count items for a given tag
   Future<int> countItemsByTag(int tagId) async {
     final ids = await getItemIdsByTag(tagId);
     return ids.length;
@@ -262,7 +247,6 @@ class AppDatabase extends _$AppDatabase {
   // ATTACHMENTS
   // --------------------------------------------------
 
-  // Copy given files to app storage and create attachment rows
   Future<void> addAttachments({
     required int itemId,
     required List<AttachmentFile> files,
@@ -286,7 +270,6 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  // Fetch attachments for an item
   Future<List<Attachment>> getAttachmentsForItem(int itemId) {
     return (select(attachments)
           ..where((t) => t.itemId.equals(itemId))
@@ -316,13 +299,11 @@ class AppDatabase extends _$AppDatabase {
 
   Future<List<Tag>> getAllTags() => select(tags).get();
 
-  // NEW: live stream of all tags (auto-refresh UIs like Search tag bar & Add screen tags)
   Stream<List<Tag>> watchAllTags() {
     final q = select(tags)..orderBy([(t) => OrderingTerm.asc(t.name)]);
     return q.watch();
   }
 
-  // NEW: live stream of tags for an item (useful in ItemDetailScreen)
   Stream<List<Tag>> watchTagsForItem(int itemId) {
     return customSelect(
       '''
@@ -416,7 +397,6 @@ class AppDatabase extends _$AppDatabase {
 
   int _nowMs() => DateTime.now().millisecondsSinceEpoch;
 
-  /// Get current auto-delete schedule for an item (if any).
   Future<Schedule?> getAutoDeleteScheduleForItem(int itemId) async {
     return (select(schedules)
           ..where((s) =>
@@ -425,39 +405,34 @@ class AppDatabase extends _$AppDatabase {
         .getSingleOrNull();
   }
 
-  /// Set (or replace) an auto-delete schedule for an item after [after].
   Future<void> setAutoDeleteSchedule({
     required int itemId,
     required Duration after,
   }) async {
     final next = _nowMs() + after.inMilliseconds;
 
-    // Remove previous schedule if exists
     await (delete(schedules)
           ..where((s) =>
               s.itemId.equals(itemId.toString()) &
               s.type.equals('auto_delete')))
         .go();
 
-    // Insert a new schedule
     final id = 'del_${itemId}_${DateTime.now().microsecondsSinceEpoch}';
     await into(schedules).insert(
       SchedulesCompanion.insert(
         id: id,
         itemId: itemId.toString(),
         type: 'auto_delete',
-        nextFire: const Value.absent(), // set via update right below or inline
+        nextFire: const Value.absent(),
         createdAt: _nowMs(),
       ),
     );
 
-    // Set nextFire via update to avoid nullable constraints confusion
     await (update(schedules)..where((s) => s.id.equals(id))).write(
       SchedulesCompanion(nextFire: Value(next)),
     );
   }
 
-  /// Clear the auto-delete schedule for an item.
   Future<void> clearAutoDeleteSchedule(int itemId) async {
     await (delete(schedules)
           ..where((s) =>
@@ -466,7 +441,6 @@ class AppDatabase extends _$AppDatabase {
         .go();
   }
 
-  /// Delete items with due auto-delete schedules (now or past).
   Future<int> pruneDueAutoDeletes() async {
     final now = _nowMs();
     final due = await (select(schedules)
@@ -484,7 +458,6 @@ class AppDatabase extends _$AppDatabase {
         if (itemId != null) {
           await deleteItemById(itemId);
         }
-        // Remove this schedule regardless
         await (delete(schedules)..where((s) => s.id.equals(sch.id))).go();
       }
     });
@@ -498,13 +471,11 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> deleteItemById(int id) async {
     await transaction(() async {
-      // Clean schedules for this item (avoid orphan schedules)
       await (delete(schedules)..where((s) => s.itemId.equals(id.toString()))).go();
 
       await (delete(itemTags)..where((t) => t.itemId.equals(id))).go();
       await (delete(attachments)..where((t) => t.itemId.equals(id))).go();
       await (delete(items)..where((t) => t.id.equals(id))).go();
-      // FTS row is removed by trigger
     });
   }
 
@@ -513,14 +484,12 @@ class AppDatabase extends _$AppDatabase {
     if (idList.isEmpty) return;
 
     await transaction(() async {
-      // Clean schedules for these items
       final sidList = idList.map((e) => e.toString()).toList();
       await (delete(schedules)..where((s) => s.itemId.isIn(sidList))).go();
 
       await (delete(itemTags)..where((t) => t.itemId.isIn(idList))).go();
       await (delete(attachments)..where((t) => t.itemId.isIn(idList))).go();
       await (delete(items)..where((t) => t.id.isIn(idList))).go();
-      // FTS rows removed by trigger
     });
   }
 
@@ -563,7 +532,6 @@ class AppDatabase extends _$AppDatabase {
 
     final fts = _ftsPrefixQuery(trimmed);
 
-    // 1) Try FTS (prefix)
     final result = await customSelect(
       '''
       SELECT items.*
@@ -580,7 +548,6 @@ class AppDatabase extends _$AppDatabase {
       return Future.wait(result.map(items.mapFromRow));
     }
 
-    // 2) Fallback: LIKE across title/content/link (mid-word substrings)
     debugPrint('FTS returned no results, falling back to LIKE for "$trimmed"');
     final like = '%$trimmed%';
     final q = select(items)
@@ -605,7 +572,6 @@ class AppDatabase extends _$AppDatabase {
 
     final fts = _ftsPrefixQuery(trimmed);
 
-    // 1) Try FTS (prefix) + tag
     final result = await customSelect(
       '''
       SELECT DISTINCT items.*
@@ -627,7 +593,6 @@ class AppDatabase extends _$AppDatabase {
       return Future.wait(result.map(items.mapFromRow));
     }
 
-    // 2) Fallback: LIKE + tag filter
     debugPrint('FTS tag search returned no results, fallback LIKE for "$trimmed"');
     final like = '%$trimmed%';
     final result2 = await customSelect(
@@ -704,7 +669,6 @@ class AppDatabase extends _$AppDatabase {
       debugPrint('FTS paged search failed: $e');
     }
 
-    // Fallback LIKE (paged)
     final like = '%$trimmed%';
     if (tagId == null) {
       final result = await customSelect(
@@ -756,5 +720,59 @@ class AppDatabase extends _$AppDatabase {
 
   Future<List<Item>> getAllItems() {
     return (select(items)..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])).get();
+  }
+
+  // --------------------------------------------------
+  // APP SETTINGS: Donation flag (Properties table)
+  // --------------------------------------------------
+
+  static const _appItemId = 'app';
+  static const _donatedKey = 'donated_eur';
+
+  Future<void> _setAppProperty({
+    required String name,
+    required String value,
+    String type = 'string',
+  }) async {
+    // Primary key is (itemId, name). Use insertOrReplace to upsert.
+    await into(properties).insert(
+      PropertiesCompanion.insert(
+        itemId: _appItemId,
+        name: name,
+        value: Value(value),
+        type: Value(type),
+      ),
+      mode: InsertMode.insertOrReplace,
+    );
+  }
+
+  Future<String?> _getAppProperty(String name) async {
+    final row = await (select(properties)
+          ..where((p) => p.itemId.equals(_appItemId) & p.name.equals(name))
+          ..limit(1))
+        .getSingleOrNull();
+    return row?.value;
+  }
+
+  Future<void> _clearAppProperty(String name) async {
+    await (delete(properties)
+          ..where((p) => p.itemId.equals(_appItemId) & p.name.equals(name)))
+        .go();
+  }
+
+  /// Set a donation amount (EUR). Pass null to clear.
+  Future<void> setDonatedAmount(int? eur) async {
+    if (eur == null) {
+      await _clearAppProperty(_donatedKey);
+      return;
+    }
+    await _setAppProperty(name: _donatedKey, value: eur.toString(), type: 'int');
+  }
+
+  /// Get the stored donation amount (EUR), or null if none set.
+  Future<int?> getDonatedAmount() async {
+    final v = await _getAppProperty(_donatedKey);
+    if (v == null) return null;
+    return int.tryParse(v);
   }
 }

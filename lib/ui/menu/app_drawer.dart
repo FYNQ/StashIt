@@ -1,13 +1,15 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 Markus Kreidl
+// SPDX-License-Identifier: Apache-2.0 © 2026 Markus Kreidl
 
 import 'package:flutter/material.dart';
+import '../../data/drift/database.dart';
 import '../pages/info_screen.dart';
 import '../pages/coffee_screen.dart';
 import '../pages/premium_screen.dart';
 
 class AppDrawer extends StatelessWidget {
-  const AppDrawer({super.key});
+  final AppDatabase db;
+
+  const AppDrawer({super.key, required this.db});
 
   void _go(BuildContext context, Widget page) {
     Navigator.pop(context); // close drawer
@@ -52,8 +54,8 @@ class AppDrawer extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.local_cafe_outlined),
-              title: const Text('Buy me a coffee'),
-              onTap: () => _go(context, const CoffeeScreen()),
+              title: const Text('Support / Donate'),
+              onTap: () => _go(context, CoffeeScreen(database: db)),
             ),
             ListTile(
               leading: const Icon(Icons.workspace_premium_outlined),
