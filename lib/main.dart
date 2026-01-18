@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 Markus Kreidl
-
 import 'package:flutter/material.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:media_kit/media_kit.dart'; // REQUIRED for media_kit init
@@ -9,45 +7,44 @@ import 'ui/search/search_screen.dart';
 import 'ui/search/search_controller.dart';
 import 'ui/add_item/add_item_screen.dart';
 import 'share/share_intent_handler.dart';
-import 'util/auto_delete_service.dart'; // <-- ADD THIS
+import 'util/auto_delete_service.dart';
+import 'util/purchase_service.dart';
 
 late final AppDatabase database;
 late final ItemSearchController searchController;
 
-/// 🔑 GLOBAL navigator key
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize media_kit once before any Player is created 🎧
   MediaKit.ensureInitialized();
 
   database = AppDatabase();
-  // Ensure FTS table + triggers exist, and index is populated
   await database.ensureFtsSetup();
 
-  // Start auto-delete pruning service
-  await AutoDeleteService.start(database); // <-- ADD THIS
+  // Start services
+  await AutoDeleteService.start(database);
+
+  // Initialize IAP service (subscriptions)
+  final purchases = PurchaseService(database);
+  await purchases.init();
 
   searchController = ItemSearchController(database);
 
   await ShareIntentHandler.init();
 
-  // 1. Capture Initial Media/Text (Cold Start)
-  List<SharedMediaFile> initialMedia = await ReceiveSharingIntent.instance.getInitialMedia();
+  // Cold start: initial share
+  final initialMedia = await ReceiveSharingIntent.instance.getInitialMedia();
 
   runApp(const StashItApp());
 
-  // 2. Handle Initial Data after app boot
   if (initialMedia.isNotEmpty) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final nav = navigatorKey.currentState;
       if (nav == null) return;
 
-      // For plain text, the content is in .path
       final firstFile = initialMedia.first;
-
       if (firstFile.type == SharedMediaType.text || firstFile.type == SharedMediaType.url) {
         nav.push(
           MaterialPageRoute(
@@ -58,7 +55,6 @@ Future<void> main() async {
           ),
         ).then((saved) {
           if (saved == true) {
-            // Refresh the search with current query (respects tag filter too)
             searchController.updateQuery(searchController.query);
           }
         });
@@ -83,8 +79,8 @@ Future<void> main() async {
     });
   }
 
-  // 3. Live Media/Text Stream (App in background/foreground)
-  ReceiveSharingIntent.instance.getMediaStream().listen((List<SharedMediaFile> files) {
+  // Live share stream
+  ReceiveSharingIntent.instance.getMediaStream().listen((files) {
     if (files.isEmpty) return;
     final nav = navigatorKey.currentState;
     if (nav == null) return;
@@ -104,16 +100,15 @@ Future<void> main() async {
         }
       });
     } else {
-      final atts = files
-          .map((f) => AttachmentFile(f.path, mimeType: f.mimeType))
-          .toList();
-
-      nav.push(MaterialPageRoute(
-        builder: (_) => AddItemScreen(
-          database: database,
-          attachments: atts,
+      final atts = files.map((f) => AttachmentFile(f.path, mimeType: f.mimeType)).toList();
+      nav.push(
+        MaterialPageRoute(
+          builder: (_) => AddItemScreen(
+            database: database,
+            attachments: atts,
+          ),
         ),
-      )).then((saved) {
+      ).then((saved) {
         if (saved == true) {
           searchController.updateQuery(searchController.query);
         }

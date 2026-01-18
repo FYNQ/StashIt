@@ -1,5 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0 © 2026 Markus Kreidl
-
+// SPDX-License-Identifier: Apache-2.0
 import 'package:flutter/material.dart';
 import '../../data/drift/database.dart';
 import '../pages/info_screen.dart';
@@ -57,10 +56,16 @@ class AppDrawer extends StatelessWidget {
               title: const Text('Support / Donate'),
               onTap: () => _go(context, CoffeeScreen(database: db)),
             ),
-            ListTile(
-              leading: const Icon(Icons.workspace_premium_outlined),
-              title: const Text('Upgrade to premium'),
-              onTap: () => _go(context, const PremiumScreen()),
+            FutureBuilder<bool>(
+              future: db.isPremiumActive(),
+              builder: (context, snap) {
+                final active = snap.data == true;
+                return ListTile(
+                  leading: Icon(active ? Icons.workspace_premium : Icons.workspace_premium_outlined),
+                  title: Text(active ? 'Premium (active)' : 'Upgrade to premium'),
+                  onTap: () => _go(context, PremiumScreen(database: db)),
+                );
+              },
             ),
             const Spacer(),
             const Divider(height: 1),

@@ -1,5 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0 © 2026 Markus Kreidl
-
+// SPDX-License-Identifier: Apache-2.0
 import 'package:flutter/material.dart';
 import 'search_controller.dart';
 import '../../data/drift/database.dart';
@@ -153,7 +152,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 );
               },
             ),
-            title: null, // No "Search" text in AppBar
+            title: null,
             actions: [
               if (hasTagFilter)
                 IconButton(
@@ -193,17 +192,13 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
                 ),
               ),
-
-              // Tag filter bar (recreated with new key to refresh)
               TagFilterBar(key: _tagBarKey, database: db, controller: widget.controller),
               const SizedBox(height: 8),
-
               if (widget.controller.isLoading)
                 const Padding(
                   padding: EdgeInsets.all(16),
                   child: CircularProgressIndicator(),
                 ),
-
               Expanded(
                 child: ListView.builder(
                   itemCount: widget.controller.results.length,
@@ -223,8 +218,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         padding: const EdgeInsets.only(right: 16),
                         child: const Icon(Icons.delete, color: Colors.white),
                       ),
-                      confirmDismiss: (_) async =>
-                          await _confirmDeleteItem(item.title),
+                      confirmDismiss: (_) async => await _confirmDeleteItem(item.title),
                       onDismissed: (_) async {
                         await widget.controller.deleteItem(item.id);
                         if (!mounted) return;
