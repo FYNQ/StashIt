@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import 'package:flutter/material.dart';
+import 'util/cloud_config.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:media_kit/media_kit.dart'; // REQUIRED for media_kit init
 import 'data/drift/database.dart';
@@ -19,6 +20,10 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   MediaKit.ensureInitialized();
+
+  // Init Supabase (Cloud)
+//  await Cloud.init();
+  await Cloud.init(apiBase: 'http://192.168.178.16:8000');
 
   database = AppDatabase();
   await database.ensureFtsSetup();

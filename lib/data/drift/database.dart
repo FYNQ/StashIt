@@ -64,6 +64,94 @@ class AppDatabase extends _$AppDatabase {
     return t.length > 50 ? '${t.substring(0, 50)}…' : t;
   }
 
+
+// ---------- CLOUD MAPPING & SYNC HELPERS ----------
+
+// Properties keys
+String _cloudLocalKey(String cloudId) => 'cloud_item_uuid:$cloudId/local_item_id';
+String _localCloudKey(int localId) => 'local_item_id:$localId/cloud_item_uuid';
+String _listLastSyncKey(String listId) => 'cloud_list_last_sync:$listId';
+
+/// Map cloud item UUID -> local item ID, and persist reverse mapping too.
+Future<void> setCloudItemMapping({
+  required String cloudId,
+  required int localId,
+}) async {
+  await into(properties).insert(
+    PropertiesCompanion.insert(
+      itemId: 'app',
+      name: _cloudLocalKey(cloudId),
+      value: Value(localId.toString()),
+      type: const Value('string'),
+    ),
+    mode: InsertMode.insertOrReplace,
+  );
+
+  await into(properties).insert(
+    PropertiesCompanion.insert(
+      itemId: 'app',
+      name: _localCloudKey(localId),
+      value: Value(cloudId),
+      type: const Value('string'),
+    ),
+    mode: InsertMode.insertOrReplace,
+  );
+}
+
+/// Lookup local item ID for a cloud UUID.
+Future<int?> getLocalIdForCloudItem(String cloudId) async {
+  final row = await (select(properties)
+        ..where((p) =>
+            p.itemId.equals('app') &
+            p.name.equals(_cloudLocalKey(cloudId)))
+        ..limit(1))
+      .getSingleOrNull();
+  if (row?.value == null || row!.value!.isEmpty) return null;
+  return int.tryParse(row.value!);
+}
+
+/// Lookup cloud UUID for a local item ID.
+Future<String?> getCloudIdForLocalItem(int localId) async {
+  final row = await (select(properties)
+        ..where((p) =>
+            p.itemId.equals('app') &
+            p.name.equals(_localCloudKey(localId)))
+        ..limit(1))
+      .getSingleOrNull();
+  return row?.value;
+}
+
+/// Persist last sync timestamp (UTC) for a specific cloud list ID.
+Future<void> setListLastSync(String listId, DateTime t) async {
+  await into(properties).insert(
+    PropertiesCompanion.insert(
+      itemId: 'app',
+      name: _listLastSyncKey(listId),
+      value: Value(t.toUtc().toIso8601String()),
+      type: const Value('string'),
+    ),
+    mode: InsertMode.insertOrReplace,
+  );
+}
+
+/// Get last sync timestamp for a specific cloud list ID.
+Future<DateTime?> getListLastSync(String listId) async {
+  final row = await (select(properties)
+        ..where((p) =>
+            p.itemId.equals('app') &
+            p.name.equals(_listLastSyncKey(listId)))
+        ..limit(1))
+      .getSingleOrNull();
+  final v = row?.value;
+  if (v == null || v.isEmpty) return null;
+  try {
+    return DateTime.parse(v);
+  } catch (_) {
+    return null;
+  }
+}
+
+
   // Convert user input into FTS prefix query: "foo bar" -> "foo* AND bar*"
   String _ftsPrefixQuery(String input) {
     final parts = input

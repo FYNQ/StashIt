@@ -4,6 +4,7 @@ import '../../data/drift/database.dart';
 import '../pages/info_screen.dart';
 import '../pages/coffee_screen.dart';
 import '../pages/premium_screen.dart';
+import '../pages/cloud_screen.dart';
 
 class AppDrawer extends StatelessWidget {
   final AppDatabase db;
@@ -47,6 +48,11 @@ class AppDrawer extends StatelessWidget {
               ),
             ),
             ListTile(
+              leading: const Icon(Icons.cloud_outlined),
+              title: const Text('Cloud & Sharing'),
+              onTap: () => _go(context, CloudScreen(database: db)),
+            ),
+            ListTile(
               leading: const Icon(Icons.info_outline),
               title: const Text('Info'),
               onTap: () => _go(context, const InfoScreen()),
@@ -56,16 +62,10 @@ class AppDrawer extends StatelessWidget {
               title: const Text('Support / Donate'),
               onTap: () => _go(context, CoffeeScreen(database: db)),
             ),
-            FutureBuilder<bool>(
-              future: db.isPremiumActive(),
-              builder: (context, snap) {
-                final active = snap.data == true;
-                return ListTile(
-                  leading: Icon(active ? Icons.workspace_premium : Icons.workspace_premium_outlined),
-                  title: Text(active ? 'Premium (active)' : 'Upgrade to premium'),
-                  onTap: () => _go(context, PremiumScreen(database: db)),
-                );
-              },
+            ListTile(
+              leading: const Icon(Icons.workspace_premium_outlined),
+              title: const Text('Upgrade to premium'),
+              onTap: () => _go(context, PremiumScreen(database: db)),
             ),
             const Spacer(),
             const Divider(height: 1),
