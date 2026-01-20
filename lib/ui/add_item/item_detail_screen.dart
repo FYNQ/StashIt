@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Markus Kreidl
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -43,6 +45,10 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   late final CloudPullService _pull;
   bool _cloudBusy = false;
 
+  // Role (for basic UI gating)
+  String? _role;
+  bool get _isViewer => _role == 'VIEWER';
+
   // Auto-delete state
   Schedule? _autoDelete;
   bool _loadingAutoDelete = true;
@@ -59,12 +65,32 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
 
     // Load current auto-delete schedule (if any)
     _loadAutoDelete();
+
+    // Load cloud role (Viewer/Editor/Manager/Owner) based on first tag’s list
+    _loadRole();
   }
 
   @override
   void dispose() {
     _notesCtrl.dispose();
     super.dispose();
+  }
+
+  // -----------------------
+  // Role load (basic gating)
+  // -----------------------
+  Future<void> _loadRole() async {
+    try {
+      final tags = await widget.database.getTagsForItem(widget.item.id);
+      if (tags.isEmpty) return;
+      final listId = await _svc.getTagCloudListId(tags.first.id);
+      if (listId == null) return;
+      final r = await _svc.getMyRoleForList(listId);
+      if (!mounted) return;
+      setState(() => _role = r);
+    } catch (_) {
+      // ignore
+    }
   }
 
   // -----------------------
@@ -425,19 +451,19 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
               padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
               child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
             ),
-        IconButton(
-          tooltip: 'Pull',
-          onPressed: _cloudBusy ? null : _pullForThisItem,
-          icon: const Icon(Icons.sync),
-        ),
-        IconButton(
-          tooltip: 'Upload',
-          onPressed: _cloudBusy ? null : _uploadThisItem,
-          icon: const Icon(Icons.cloud_upload_outlined),
-        ),
+          IconButton(
+            tooltip: 'Pull',
+            onPressed: _isViewer ? null : (_cloudBusy ? null : _pullForThisItem),
+            icon: const Icon(Icons.sync),
+          ),
+          IconButton(
+            tooltip: 'Upload',
+            onPressed: _isViewer ? null : (_cloudBusy ? null : _uploadThisItem),
+            icon: const Icon(Icons.cloud_upload_outlined),
+          ),
           IconButton(
             tooltip: 'Attach tag',
-            onPressed: _attachTagFlow,
+            onPressed: _isViewer ? null : _attachTagFlow,
             icon: const Icon(Icons.label_important_outline),
           ),
           IconButton(
@@ -451,7 +477,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
           ),
           IconButton(
             tooltip: 'Delete item',
-            onPressed: _deleteThisItem,
+            onPressed: _isViewer ? null : _deleteThisItem,
             icon: const Icon(Icons.delete_outline),
           ),
         ],
@@ -467,7 +493,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Notes (Content) section
-                if (_editingNotes) ...[
+                if (_editingNotes && !_isViewer) ...[
                   const Text("Notes", style: TextStyle(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 4),
                   TextField(
@@ -506,11 +532,12 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                       children: [
                         const Text("Notes:", style: TextStyle(fontWeight: FontWeight.w600)),
                         const Spacer(),
-                        IconButton(
-                          tooltip: 'Edit notes',
-                          icon: const Icon(Icons.edit_note),
-                          onPressed: () => setState(() => _editingNotes = true),
-                        ),
+                        if (!_isViewer)
+                          IconButton(
+                            tooltip: 'Edit notes',
+                            icon: const Icon(Icons.edit_note),
+                            onPressed: () => setState(() => _editingNotes = true),
+                          ),
                       ],
                     ),
                     InkWell(
@@ -524,11 +551,14 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                     ),
                     const SizedBox(height: 12),
                   ] else ...[
-                    OutlinedButton.icon(
-                      onPressed: () => setState(() => _editingNotes = true),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add notes'),
-                    ),
+                    if (!_isViewer)
+                      OutlinedButton.icon(
+                        onPressed: () => setState(() => _editingNotes = true),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add notes'),
+                      ),
+                    if (_isViewer)
+                      const Text('No notes', style: TextStyle(color: Colors.black54)),
                     const SizedBox(height: 12),
                   ],
                 ],
@@ -657,7 +687,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                             children: tags.map((t) {
                               return InputChip(
                                 label: Text(t.name),
-                                onDeleted: () => _detachTag(t.id),
+                                onDeleted: _isViewer ? null : () => _detachTag(t.id),
                               );
                             }).toList(),
                           ),

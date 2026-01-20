@@ -8,6 +8,7 @@ import '../tags/tag_manager_screen.dart';
 import '../menu/app_drawer.dart';
 import '../../util/cloud_share_service.dart';
 import '../../util/cloud_pull_service.dart';
+import '../pages/members_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   final ItemSearchController controller;
@@ -254,6 +255,29 @@ class _SearchScreenState extends State<SearchScreen> {
                   child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
                 ),
               if (hasTagFilter) ...[
+                // New: Members management entry
+                IconButton(
+                  tooltip: 'Members',
+                  onPressed: () async {
+                    final tagId = widget.controller.tagId!;
+                    final listId = await _svc.getTagCloudListId(tagId);
+                    if (listId == null) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('This tag is not shared yet.')),
+                      );
+                      return;
+                    }
+                    if (!mounted) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => MembersScreen(database: db, tagId: tagId),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.people_outline),
+                ),
                 IconButton(
                   tooltip: 'Pull this tag',
                   onPressed: _cloudBusy ? null : () => _pullForTag(widget.controller.tagId!),

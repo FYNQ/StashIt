@@ -52,6 +52,53 @@ class CloudShareService {
     );
   }
 
+
+// Cache my role locally
+Future<void> setMyRoleForList(String listId, String role) async {
+  await db.into(db.properties).insert(
+    PropertiesCompanion.insert(
+      itemId: 'app',
+      name: 'list:$listId/my_role',
+      value: d.Value(role),
+      type: d.Value('string'),
+    ),
+    mode: d.InsertMode.insertOrReplace,
+  );
+}
+
+Future<String?> getMyRoleForList(String listId) async {
+  final row = await (db.select(db.properties)
+        ..where((p) => p.itemId.equals('app') & p.name.equals('list:$listId/my_role'))
+        ..limit(1))
+      .getSingleOrNull();
+  return row?.value;
+}
+
+// Members API (server endpoints must exist)
+Future<void> updateMemberRole({
+  required String listId,
+  required String userId,
+  required String role, // OWNER | MANAGER | EDITOR | VIEWER
+}) async {
+  final resp = await Cloud.client.patch(
+    Cloud.uri('/lists/$listId/members/$userId'),
+    headers: Cloud.headersJson(),
+    body: jsonEncode({'role': role}),
+  );
+  if (resp.statusCode != 200) throw 'Update role failed: ${resp.body}';
+}
+
+Future<void> removeMember({
+  required String listId,
+  required String userId,
+}) async {
+  final resp = await Cloud.client.delete(
+    Cloud.uri('/lists/$listId/members/$userId'),
+    headers: Cloud.headersJson(),
+  );
+  if (resp.statusCode != 200) throw 'Remove member failed: ${resp.body}';
+}
+
   Future<String?> _getMap(String key) async {
     final row = await (db.select(db.properties)
           ..where((p) => p.itemId.equals('app') & p.name.equals(key))
