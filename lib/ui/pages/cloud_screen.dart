@@ -209,7 +209,7 @@ class _CloudScreenState extends State<CloudScreen> {
                           title: Text(t.name),
                           subtitle: Text(isShared ? 'Shared list' : 'Not shared'),
                           trailing: Wrap(
-                            spacing: 8,
+                            spacing: 4,
                             children: [
                               OutlinedButton(
                                 onPressed: !_signedIn ? null : () => _shareTag(t),
@@ -219,9 +219,11 @@ class _CloudScreenState extends State<CloudScreen> {
                                 onPressed: !_signedIn ? null : () => _inviteLink(t),
                                 child: const Text('Invite link'),
                               ),
-                              OutlinedButton(
+                              // Icon-only Members button (no text)
+                              IconButton(
+                                tooltip: 'Members',
+                                icon: const Icon(Icons.people_outline),
                                 onPressed: !_signedIn ? null : () => _openMembers(t),
-                                child: const Text('Members'),
                               ),
                               OutlinedButton(
                                 onPressed: !_signedIn ? null : () => _pullForTag(t),

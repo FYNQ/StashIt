@@ -86,6 +86,56 @@ class _TagManagerScreenState extends State<TagManagerScreen> {
     );
   }
 
+  Future<String?> _askRename(String current) async {
+    final textCtrl = TextEditingController(text: current);
+    return await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Rename tag'),
+          content: TextField(
+            controller: textCtrl,
+            autofocus: true,
+            decoration: const InputDecoration(
+              hintText: 'e.g. Work projects',
+              border: OutlineInputBorder(),
+            ),
+            // Do NOT strip internal spaces. We only trim when saving.
+            onSubmitted: (_) => Navigator.pop(ctx, textCtrl.text),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, textCtrl.text),
+              child: const Text('Rename'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _renameTag(Tag t) async {
+    final newName = await _askRename(t.name);
+    if (newName == null) return;
+
+    setState(() => _working = true);
+    try {
+      await widget.database.renameTag(tagId: t.id, newName: newName);
+      await _reload();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Rename failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -150,14 +200,23 @@ class _TagManagerScreenState extends State<TagManagerScreen> {
                       leading: const Icon(Icons.label),
                       title: Text(t.name),
                       trailing: Wrap(
-                        spacing: 8,
+                        spacing: 4,
                         children: [
-                          OutlinedButton.icon(
-                            icon: const Icon(Icons.people_outline, size: 18),
-                            label: const Text('Members'),
+                          // Icon-only Members button (no text)
+                          IconButton(
+                            tooltip: 'Members',
+                            icon: const Icon(Icons.people_outline),
                             onPressed: _working ? null : () => _openMembers(t),
                           ),
+                          // Rename (supports spaces)
                           IconButton(
+                            tooltip: 'Rename',
+                            icon: const Icon(Icons.edit_outlined),
+                            onPressed: _working ? null : () => _renameTag(t),
+                          ),
+                          // Delete
+                          IconButton(
+                            tooltip: 'Delete',
                             icon: const Icon(Icons.delete_outline),
                             onPressed: _working ? null : () => _deleteTag(t.id),
                           ),

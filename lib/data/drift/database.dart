@@ -98,6 +98,23 @@ Future<void> setCloudItemMapping({
   );
 }
 
+/// Rename an existing tag. Leading/trailing spaces are trimmed,
+/// internal spaces are preserved. Throws if the name is empty.
+Future<void> renameTag({
+  required int tagId,
+  required String newName,
+}) async {
+  final trimmed = newName.trim();
+  if (trimmed.isEmpty) {
+    throw ArgumentError('Tag name cannot be empty');
+  }
+  // Unique constraint is enforced at DB level. If the new name
+  // already exists, this update will throw – surface it to caller.
+  await (update(tags)..where((t) => t.id.equals(tagId))).write(
+    TagsCompanion(name: Value(trimmed)),
+  );
+}
+
 /// Lookup local item ID for a cloud UUID.
 Future<int?> getLocalIdForCloudItem(String cloudId) async {
   final row = await (select(properties)

@@ -24,7 +24,8 @@ Future<void> main() async {
 
   // Init Supabase (Cloud)
 //  await Cloud.init();
-  await Cloud.init(apiBase: 'http://10.0.0.59:8000');
+  //await Cloud.init(apiBase: 'http://10.0.0.59:8000');
+  await Cloud.init(apiBase: 'http://192.168.178.16:8000');
 
   database = AppDatabase();
   await database.ensureFtsSetup();
