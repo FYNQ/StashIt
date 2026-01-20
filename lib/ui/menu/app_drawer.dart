@@ -4,11 +4,10 @@ import '../../data/drift/database.dart';
 import '../pages/info_screen.dart';
 import '../pages/coffee_screen.dart';
 import '../pages/premium_screen.dart';
-import '../pages/cloud_screen.dart';
+import '../pages/settings_screen.dart';
 
 class AppDrawer extends StatelessWidget {
   final AppDatabase db;
-
   const AppDrawer({super.key, required this.db});
 
   void _go(BuildContext context, Widget page) {
@@ -48,9 +47,9 @@ class AppDrawer extends StatelessWidget {
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.cloud_outlined),
-              title: const Text('Cloud & Sharing'),
-              onTap: () => _go(context, CloudScreen(database: db)),
+              leading: const Icon(Icons.settings),
+              title: const Text('Settings & Cloud'),
+              onTap: () => _go(context, SettingsScreen(database: db)),
             ),
             ListTile(
               leading: const Icon(Icons.info_outline),
@@ -65,6 +64,7 @@ class AppDrawer extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.workspace_premium_outlined),
               title: const Text('Upgrade to premium'),
+              // NOTE: pass database here (no const!)
               onTap: () => _go(context, PremiumScreen(database: db)),
             ),
             const Spacer(),

@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 Markus Kreidl
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -10,6 +8,10 @@ import '../media/image_viewer_screen.dart';
 import '../media/audio_player_screen.dart';
 import '../media/text_viewer_screen.dart';
 import '../../util/share_out.dart';
+
+// Cloud (pull/upload)
+import '../../util/cloud_share_service.dart';
+import '../../util/cloud_pull_service.dart';
 
 class ItemDetailScreen extends StatefulWidget {
   final Item item;
@@ -36,6 +38,11 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   bool _editingNotes = false;
   late TextEditingController _notesCtrl;
 
+  // Cloud services
+  late final CloudShareService _svc;
+  late final CloudPullService _pull;
+  bool _cloudBusy = false;
+
   // Auto-delete state
   Schedule? _autoDelete;
   bool _loadingAutoDelete = true;
@@ -46,9 +53,23 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     _item = widget.item;
     _notesCtrl = TextEditingController(text: _item.content ?? '');
     _futureAttachments = widget.database.getAttachmentsForItem(widget.item.id);
+
+    _svc = CloudShareService(widget.database);
+    _pull = CloudPullService(widget.database);
+
+    // Load current auto-delete schedule (if any)
     _loadAutoDelete();
   }
 
+  @override
+  void dispose() {
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  // -----------------------
+  // Auto-delete helpers
+  // -----------------------
   Future<void> _loadAutoDelete() async {
     final s = await widget.database.getAutoDeleteScheduleForItem(widget.item.id);
     if (!mounted) return;
@@ -58,9 +79,9 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     });
   }
 
-  Future<void> _setAutoDelete(Duration d) async {
+  Future<void> _setAutoDelete(Duration after) async {
     setState(() => _loadingAutoDelete = true);
-    await widget.database.setAutoDeleteSchedule(itemId: widget.item.id, after: d);
+    await widget.database.setAutoDeleteSchedule(itemId: widget.item.id, after: after);
     await _loadAutoDelete();
   }
 
@@ -76,12 +97,9 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     return dt.toLocal().toString();
   }
 
-  @override
-  void dispose() {
-    _notesCtrl.dispose();
-    super.dispose();
-  }
-
+  // -----------------------
+  // Tags attach/detach
+  // -----------------------
   Future<void> _detachTag(int tagId) async {
     await widget.database.detachTag(itemId: widget.item.id, tagId: tagId);
   }
@@ -282,23 +300,22 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
       ),
     );
   }
-  // --- end helpers ---
 
   void _openTextViewer(String text) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => TextViewerScreen(
-          text: text,
-        ),
+        builder: (_) => TextViewerScreen(text: text),
       ),
     );
   }
 
   Future<void> _saveNotes() async {
     final newText = _notesCtrl.text.trim();
-    // Ensure your AppDatabase has updateItemContent method.
-    await widget.database.updateItemContent(id: _item.id, content: newText.isEmpty ? null : newText);
+    await widget.database.updateItemContent(
+      id: _item.id,
+      content: newText.isEmpty ? null : newText,
+    );
     setState(() {
       _item = Item(
         id: _item.id,
@@ -312,6 +329,88 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     });
   }
 
+  // --- Cloud: Upload this item (via first tag’s list) ---
+  Future<void> _uploadThisItem() async {
+    if (!CloudHeaders.hasBearer) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign in first (Settings & Cloud).')),
+      );
+      return;
+    }
+    setState(() => _cloudBusy = true);
+    try {
+      final tags = await widget.database.getTagsForItem(widget.item.id);
+      if (tags.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Add a tag to this item first.')),
+          );
+        }
+        return;
+      }
+      final t = tags.first;
+      final listId = await _svc.getOrCreateListIdForTag(tagId: t.id, tagName: t.name);
+      await _svc.uploadOneItem(_item, listId: listId);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Uploaded under "${t.name}".')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _cloudBusy = false);
+    }
+  }
+
+  // --- Cloud: Pull items for this item’s first tag’s list ---
+  Future<void> _pullForThisItem() async {
+    if (!CloudHeaders.hasBearer) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign in first (Settings & Cloud).')),
+      );
+      return;
+    }
+    setState(() => _cloudBusy = true);
+    try {
+      final tags = await widget.database.getTagsForItem(widget.item.id);
+      if (tags.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Add a tag to this item first.')),
+          );
+        }
+        return;
+      }
+      final t = tags.first;
+      final listId = await _svc.getOrCreateListIdForTag(tagId: t.id, tagName: t.name);
+      final since = await widget.database.getListLastSync(listId);
+      await _pull.pullItemsForList(listId: listId, since: since);
+      await widget.database.setListLastSync(listId, DateTime.now().toUtc());
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Pulled updates for "${t.name}".')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Pull failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _cloudBusy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasContent = (_item.content ?? '').trim().isNotEmpty;
@@ -321,6 +420,21 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
       appBar: AppBar(
         title: Text(_item.title),
         actions: [
+          if (_cloudBusy)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+              child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+            ),
+        IconButton(
+          tooltip: 'Pull',
+          onPressed: _cloudBusy ? null : _pullForThisItem,
+          icon: const Icon(Icons.sync),
+        ),
+        IconButton(
+          tooltip: 'Upload',
+          onPressed: _cloudBusy ? null : _uploadThisItem,
+          icon: const Icon(Icons.cloud_upload_outlined),
+        ),
           IconButton(
             tooltip: 'Attach tag',
             onPressed: _attachTagFlow,

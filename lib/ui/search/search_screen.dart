@@ -6,6 +6,8 @@ import '../add_item/item_detail_screen.dart';
 import 'tag_filter_bar.dart';
 import '../tags/tag_manager_screen.dart';
 import '../menu/app_drawer.dart';
+import '../../util/cloud_share_service.dart';
+import '../../util/cloud_pull_service.dart';
 
 class SearchScreen extends StatefulWidget {
   final ItemSearchController controller;
@@ -23,6 +25,11 @@ class _SearchScreenState extends State<SearchScreen> {
   late final TextEditingController _textController;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
+  // Cloud services
+  late final CloudShareService _svc;
+  late final CloudPullService _pull;
+  bool _cloudBusy = false;
+
   // Key to force TagFilterBar to rebuild (and refetch tags)
   Key _tagBarKey = UniqueKey();
 
@@ -33,6 +40,9 @@ class _SearchScreenState extends State<SearchScreen> {
       text: widget.controller.query,
     );
     widget.controller.addListener(_syncText);
+
+    _svc = CloudShareService(widget.controller.db);
+    _pull = CloudPullService(widget.controller.db);
 
     // Trigger initial load so recent items appear on first open
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -119,6 +129,95 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
+  Future<void> _pullForTag(int tagId) async {
+    if (!CloudHeaders.hasBearer) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign in first (Settings & Cloud).')),
+      );
+      return;
+    }
+    setState(() => _cloudBusy = true);
+    try {
+      final tags = await widget.controller.db.getAllTags();
+      final t = tags.firstWhere((x) => x.id == tagId);
+      final listId = await _svc.getOrCreateListIdForTag(tagId: t.id, tagName: t.name);
+      final since = await widget.controller.db.getListLastSync(listId);
+      await _pull.pullItemsForList(listId: listId, since: since);
+      await widget.controller.db.setListLastSync(listId, DateTime.now().toUtc());
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Pulled updates for "${t.name}".')),
+      );
+      // Refresh list
+      await widget.controller.updateQuery(widget.controller.query);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Pull failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _cloudBusy = false);
+    }
+  }
+
+  Future<void> _pullAll() async {
+    if (!CloudHeaders.hasBearer) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign in first (Settings & Cloud).')),
+      );
+      return;
+    }
+    setState(() => _cloudBusy = true);
+    try {
+      await _pull.pullAllListsAndItems();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pulled all accessible lists.')),
+        );
+      }
+      await widget.controller.updateQuery(widget.controller.query);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Pull-all failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _cloudBusy = false);
+    }
+  }
+
+  Future<void> _uploadTag(int tagId) async {
+    if (!CloudHeaders.hasBearer) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign in first (Settings & Cloud).')),
+      );
+      return;
+    }
+    setState(() => _cloudBusy = true);
+    try {
+      await _svc.uploadAllItemsForTag(tagId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Uploaded items in this tag.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _cloudBusy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final db = widget.controller.db;
@@ -142,18 +241,36 @@ class _SearchScreenState extends State<SearchScreen> {
                   borderRadius: BorderRadius.circular(28),
                   child: Padding(
                     padding: const EdgeInsets.all(8.0),
-                    child: Image.asset(
-                      asset,
-                      width: 32,
-                      height: 32,
-                      fit: BoxFit.contain,
-                    ),
+                    child: Image.asset(asset, width: 32, height: 32, fit: BoxFit.contain),
                   ),
                 );
               },
             ),
             title: null,
             actions: [
+              if (_cloudBusy)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                  child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                ),
+              if (hasTagFilter) ...[
+                IconButton(
+                  tooltip: 'Pull this tag',
+                  onPressed: _cloudBusy ? null : () => _pullForTag(widget.controller.tagId!),
+                  icon: const Icon(Icons.sync),
+                ),
+                IconButton(
+                  tooltip: 'Upload this tag',
+                  onPressed: _cloudBusy ? null : () => _uploadTag(widget.controller.tagId!),
+                  icon: const Icon(Icons.cloud_upload_outlined),
+                ),
+              ] else ...[
+                IconButton(
+                  tooltip: 'Pull all',
+                  onPressed: _cloudBusy ? null : _pullAll,
+                  icon: const Icon(Icons.sync),
+                ),
+              ],
               if (hasTagFilter)
                 IconButton(
                   tooltip: 'Delete all in this tag',
@@ -194,11 +311,13 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
               TagFilterBar(key: _tagBarKey, database: db, controller: widget.controller),
               const SizedBox(height: 8),
+
               if (widget.controller.isLoading)
                 const Padding(
                   padding: EdgeInsets.all(16),
                   child: CircularProgressIndicator(),
                 ),
+
               Expanded(
                 child: ListView.builder(
                   itemCount: widget.controller.results.length,
