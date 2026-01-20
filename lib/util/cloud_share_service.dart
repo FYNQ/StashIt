@@ -33,7 +33,7 @@ class CloudShareService {
       }),
     );
     if (resp.statusCode != 200) {
-      throw 'Sign-in failed: ${resp.body}';
+      throw 'Sign-in failed (HTTP ${resp.statusCode}): ${resp.body}';
     }
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
     Cloud.setBearer(data['token'] as String?);
@@ -52,52 +52,66 @@ class CloudShareService {
     );
   }
 
+  // Cache my role locally
+  Future<void> setMyRoleForList(String listId, String role) async {
+    await db.into(db.properties).insert(
+      PropertiesCompanion.insert(
+        itemId: 'app',
+        name: 'list:$listId/my_role',
+        value: d.Value(role),
+        type: d.Value('string'),
+      ),
+      mode: d.InsertMode.insertOrReplace,
+    );
+  }
 
-// Cache my role locally
-Future<void> setMyRoleForList(String listId, String role) async {
-  await db.into(db.properties).insert(
-    PropertiesCompanion.insert(
-      itemId: 'app',
-      name: 'list:$listId/my_role',
-      value: d.Value(role),
-      type: d.Value('string'),
-    ),
-    mode: d.InsertMode.insertOrReplace,
-  );
-}
+  Future<String?> getMyRoleForList(String listId) async {
+    final row = await (db.select(db.properties)
+          ..where((p) => p.itemId.equals('app') & p.name.equals('list:$listId/my_role'))
+          ..limit(1))
+        .getSingleOrNull();
+    return row?.value;
+  }
 
-Future<String?> getMyRoleForList(String listId) async {
-  final row = await (db.select(db.properties)
-        ..where((p) => p.itemId.equals('app') & p.name.equals('list:$listId/my_role'))
-        ..limit(1))
-      .getSingleOrNull();
-  return row?.value;
-}
+  // Members API
+  Future<void> updateMemberRole({
+    required String listId,
+    required String userId,
+    required String role, // OWNER | MANAGER | EDITOR | VIEWER (server refuses OWNER changes)
+  }) async {
+    final resp = await Cloud.client.patch(
+      Cloud.uri('/lists/$listId/members/$userId'),
+      headers: Cloud.headersJson(),
+      body: jsonEncode({'role': role}),
+    );
+    if (resp.statusCode != 200) {
+      throw 'Update role failed (HTTP ${resp.statusCode}): ${resp.body}';
+    }
+  }
 
-// Members API (server endpoints must exist)
-Future<void> updateMemberRole({
-  required String listId,
-  required String userId,
-  required String role, // OWNER | MANAGER | EDITOR | VIEWER
-}) async {
-  final resp = await Cloud.client.patch(
-    Cloud.uri('/lists/$listId/members/$userId'),
-    headers: Cloud.headersJson(),
-    body: jsonEncode({'role': role}),
-  );
-  if (resp.statusCode != 200) throw 'Update role failed: ${resp.body}';
-}
+  Future<void> removeMember({
+    required String listId,
+    required String userId,
+  }) async {
+    final resp = await Cloud.client.delete(
+      Cloud.uri('/lists/$listId/members/$userId'),
+      headers: Cloud.headersJson(),
+    );
+    if (resp.statusCode != 204) {
+      throw 'Remove member failed (HTTP ${resp.statusCode}): ${resp.body}';
+    }
+  }
 
-Future<void> removeMember({
-  required String listId,
-  required String userId,
-}) async {
-  final resp = await Cloud.client.delete(
-    Cloud.uri('/lists/$listId/members/$userId'),
-    headers: Cloud.headersJson(),
-  );
-  if (resp.statusCode != 200) throw 'Remove member failed: ${resp.body}';
-}
+  Future<Map<String, dynamic>> getListMembers(String listId) async {
+    final resp = await Cloud.client.get(
+      Cloud.uri('/lists/$listId/members'),
+      headers: Cloud.headersJson(),
+    );
+    if (resp.statusCode != 200) {
+      throw 'Members fetch failed (HTTP ${resp.statusCode}).';
+    }
+    return jsonDecode(resp.body) as Map<String, dynamic>;
+  }
 
   Future<String?> _getMap(String key) async {
     final row = await (db.select(db.properties)
@@ -136,7 +150,7 @@ Future<void> removeMember({
       headers: Cloud.headersJson(),
       body: jsonEncode({'name': tagName.trim().isEmpty ? 'Shared List' : tagName.trim()}),
     );
-    if (resp.statusCode != 200) throw 'Create list failed: ${resp.body}';
+    if (resp.statusCode != 200) throw 'Create list failed (HTTP ${resp.statusCode}): ${resp.body}';
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
     final listId = data['id'] as String;
     await setTagCloudListId(tagId, listId);
@@ -152,7 +166,7 @@ Future<void> removeMember({
       Cloud.uri('/lists/$listId/invite', {'ttlDays': ttlDays}),
       headers: Cloud.headersJson(),
     );
-    if (resp.statusCode != 200) throw 'Invite failed: ${resp.body}';
+    if (resp.statusCode != 200) throw 'Invite failed (HTTP ${resp.statusCode}): ${resp.body}';
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
     final token = data['token'] as String;
     return 'stashr://invite?token=$token';
@@ -164,19 +178,9 @@ Future<void> removeMember({
       headers: Cloud.headersJson(),
       body: jsonEncode({'token': token}),
     );
-    if (resp.statusCode != 200) throw 'Accept failed: ${resp.body}';
+    if (resp.statusCode != 200) throw 'Accept failed (HTTP ${resp.statusCode}): ${resp.body}';
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
     return data['listId'] as String;
-  }
-
-  // Optional members endpoint
-  Future<Map<String, dynamic>> getListMembers(String listId) async {
-    final resp = await Cloud.client.get(
-      Cloud.uri('/lists/$listId/members'),
-      headers: Cloud.headersJson(),
-    );
-    if (resp.statusCode != 200) throw 'Members fetch failed: ${resp.body}';
-    return jsonDecode(resp.body) as Map<String, dynamic>;
   }
 
   // Upload items + attachments
@@ -200,7 +204,7 @@ Future<void> removeMember({
         'link': it.link,
       }),
     );
-    if (resp.statusCode != 200) throw 'Item create failed: ${resp.body}';
+    if (resp.statusCode != 200) throw 'Item create failed (HTTP ${resp.statusCode}): ${resp.body}';
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
     final cloudItemId = data['id'] as String;
 
@@ -221,8 +225,8 @@ Future<void> removeMember({
       final respUp = await req.send();
       if (respUp.statusCode != 200) {
         final txt = await respUp.stream.bytesToString();
-        throw 'Attachment upload failed: $txt';
-      }
+        throw 'Attachment upload failed (HTTP ${respUp.statusCode}): $txt';
+        }
     }
   }
 }

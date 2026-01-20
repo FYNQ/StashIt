@@ -10,6 +10,7 @@ import 'ui/add_item/add_item_screen.dart';
 import 'share/share_intent_handler.dart';
 import 'util/auto_delete_service.dart';
 import 'util/purchase_service.dart';
+import 'share/deep_link_handler.dart';
 
 late final AppDatabase database;
 late final ItemSearchController searchController;
@@ -23,7 +24,7 @@ Future<void> main() async {
 
   // Init Supabase (Cloud)
 //  await Cloud.init();
-  await Cloud.init(apiBase: 'http://192.168.178.16:8000');
+  await Cloud.init(apiBase: 'http://10.0.0.59:8000');
 
   database = AppDatabase();
   await database.ensureFtsSetup();
@@ -43,6 +44,17 @@ Future<void> main() async {
   final initialMedia = await ReceiveSharingIntent.instance.getInitialMedia();
 
   runApp(const StashItApp());
+
+  // Initialize deep links after first frame
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    final nav = navigatorKey.currentState;
+    if (nav != null) {
+      DeepLinkHandler.init(
+        context: nav.context,
+        db: database,
+      );
+    }
+  });
 
   if (initialMedia.isNotEmpty) {
     WidgetsBinding.instance.addPostFrameCallback((_) {

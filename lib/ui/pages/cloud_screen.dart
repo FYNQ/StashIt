@@ -4,6 +4,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../data/drift/database.dart';
 import '../../util/cloud_share_service.dart';
 import '../../util/cloud_pull_service.dart';
+import '../pages/members_screen.dart';
 
 class CloudScreen extends StatefulWidget {
   final AppDatabase database;
@@ -112,6 +113,31 @@ class _CloudScreenState extends State<CloudScreen> {
     }
   }
 
+  Future<void> _openMembers(Tag t) async {
+    if (!_signedIn) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign in first (Settings & Cloud).')),
+      );
+      return;
+    }
+    final listId = await _svc.getTagCloudListId(t.id);
+    if (listId == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Not shared yet. Use Share first.')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MembersScreen(database: widget.database, tagId: t.id),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _deviceCtrl.dispose();
@@ -185,10 +211,26 @@ class _CloudScreenState extends State<CloudScreen> {
                           trailing: Wrap(
                             spacing: 8,
                             children: [
-                              OutlinedButton(onPressed: !_signedIn ? null : () => _shareTag(t), child: Text(isShared ? 'Manage' : 'Share')),
-                              OutlinedButton(onPressed: !_signedIn ? null : () => _inviteLink(t), child: const Text('Invite link')),
-                              OutlinedButton(onPressed: !_signedIn ? null : () => _pullForTag(t), child: const Text('Pull')),
-                              FilledButton(onPressed: !_signedIn ? null : () => _upload(t), child: const Text('Upload now')),
+                              OutlinedButton(
+                                onPressed: !_signedIn ? null : () => _shareTag(t),
+                                child: Text(isShared ? 'Manage' : 'Share'),
+                              ),
+                              OutlinedButton(
+                                onPressed: !_signedIn ? null : () => _inviteLink(t),
+                                child: const Text('Invite link'),
+                              ),
+                              OutlinedButton(
+                                onPressed: !_signedIn ? null : () => _openMembers(t),
+                                child: const Text('Members'),
+                              ),
+                              OutlinedButton(
+                                onPressed: !_signedIn ? null : () => _pullForTag(t),
+                                child: const Text('Pull'),
+                              ),
+                              FilledButton(
+                                onPressed: !_signedIn ? null : () => _upload(t),
+                                child: const Text('Upload now'),
+                              ),
                             ],
                           ),
                         );

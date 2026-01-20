@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 Markus Kreidl
+// Copyright ...
 
 import 'package:flutter/material.dart';
 import '../../data/drift/database.dart';
+import '../../util/cloud_share_service.dart';
+import '../pages/members_screen.dart';
 
 class TagManagerScreen extends StatefulWidget {
   final AppDatabase database;
@@ -51,6 +53,37 @@ class _TagManagerScreenState extends State<TagManagerScreen> {
     } finally {
       setState(() => _working = false);
     }
+  }
+
+  Future<void> _openMembers(Tag t) async {
+    final svc = CloudShareService(widget.database);
+
+    // Require sign-in
+    if (!CloudHeaders.hasBearer) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign in first (Settings & Cloud).')),
+      );
+      return;
+    }
+
+    // Require shared list
+    final listId = await svc.getTagCloudListId(t.id);
+    if (listId == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This tag is not shared yet. Use Share/Invite first.')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MembersScreen(database: widget.database, tagId: t.id),
+      ),
+    );
   }
 
   @override
@@ -116,9 +149,19 @@ class _TagManagerScreenState extends State<TagManagerScreen> {
                     return ListTile(
                       leading: const Icon(Icons.label),
                       title: Text(t.name),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: _working ? null : () => _deleteTag(t.id),
+                      trailing: Wrap(
+                        spacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.people_outline, size: 18),
+                            label: const Text('Members'),
+                            onPressed: _working ? null : () => _openMembers(t),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: _working ? null : () => _deleteTag(t.id),
+                          ),
+                        ],
                       ),
                     );
                   },
